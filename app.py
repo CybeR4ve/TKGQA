@@ -1,8 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, redirect
 from flask_cors import CORS
 import os
 import json
 import uuid
+import time
 from datetime import datetime
 from openai import OpenAI
 
@@ -10,12 +11,50 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # 你应该在生产环境中使用环境变量存储这些值
-API_KEY = "your_api_key_here"
-BASE_URL = "https://api.deepseek.com"  # DeepSeek API 的基础 URL
-MODEL_NAME = "deepseek-chat"  # 使用的模型名称
+# OpenAI API key - 在生产环境中应该使用环境变量
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', 'your_api_key_here')
+# 可以根据需要切换不同的API提供商
+USE_OPENAI = True  # 设置为False可以使用DeepSeek API
+
+# DeepSeek API 配置
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', 'your_deepseek_api_key_here')
+DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
+DEEPSEEK_MODEL = 'deepseek-chat'
+
+# OpenAI API 配置
+OPENAI_MODEL = 'gpt-3.5-turbo'
+
+# 初始化OpenAI客户端
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# 聊天历史文件存储目录
+CHAT_HISTORY_DIR = 'chat_histories'
+if not os.path.exists(CHAT_HISTORY_DIR):
+    os.makedirs(CHAT_HISTORY_DIR)
 
 # In-memory storage for conversations (replace with a database in production)
 conversations = []
+
+# 从文件加载对话历史（如果存在）
+def load_conversations_from_files():
+    try:
+        if os.path.exists(os.path.join(CHAT_HISTORY_DIR, 'conversations.json')):
+            with open(os.path.join(CHAT_HISTORY_DIR, 'conversations.json'), 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f'Error loading conversations: {e}')
+    return []
+
+# 保存对话历史到文件
+def save_conversations_to_files():
+    try:
+        with open(os.path.join(CHAT_HISTORY_DIR, 'conversations.json'), 'w', encoding='utf-8') as f:
+            json.dump(conversations, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f'Error saving conversations: {e}')
+
+# 初始化时加载对话历史
+conversations = load_conversations_from_files()
 
 @app.route('/api/conversations', methods=['GET'])
 def get_conversations():
@@ -34,7 +73,15 @@ def create_conversation():
     }
     
     conversations.insert(0, new_conversation)
+    save_conversations_to_files()  # 保存到文件
     return jsonify(new_conversation)
+
+@app.route('/api/conversations/<conversation_id>', methods=['DELETE'])
+def delete_conversation(conversation_id):
+    global conversations
+    conversations = [conv for conv in conversations if conv['id'] != conversation_id]
+    save_conversations_to_files()  # 保存到文件
+    return jsonify({'success': True})
 
 @app.route('/api/conversations/<conversation_id>/messages', methods=['POST'])
 def send_message(conversation_id):
@@ -78,6 +125,9 @@ def send_message(conversation_id):
         # 将系统消息添加到对话中
         conversation['messages'].append(system_message)
         
+        # 保存对话历史到文件
+        save_conversations_to_files()
+        
         return jsonify({
             'userMessage': user_message,
             'systemMessage': system_message
@@ -88,43 +138,48 @@ def send_message(conversation_id):
 def get_llm_response(prompt, conversation_history):
     """
     从大型语言模型 API 获取响应。
-    这个示例使用 DeepSeek API，但你可以替换为任何 LLM API。
+    支持 OpenAI API 和 DeepSeek API。
+    实现多轮对话的上下文传递。
     """
     try:
-        # 创建 OpenAI 客户端（用于 DeepSeek API，它兼容 OpenAI 的接口）
-        client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
-        
         # 将对话历史转换为 API 期望的格式
         messages = []
+        
+        # 添加系统消息
+        messages.append({"role": "system", "content": "你是一个有用的助手。请提供有帮助、安全、准确的信息。"})
         
         # 添加所有历史消息作为上下文（完整的对话历史）
         for msg in conversation_history:
             role = "user" if msg['sender'] == 'user' else "assistant"
             messages.append({"role": role, "content": msg['content']})
         
-        # 如果最后一条消息不是用户的，添加当前提示
-        if not messages or messages[-1]['role'] != 'user':
-            messages.append({"role": "user", "content": prompt})
+        print(f"发送到 LLM API 的消息: {messages}")
         
-        # 调用 API
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            temperature=0.7
-        )
-        
-        # 提取助手的消息
-        return response.choices[0].message.content
+        if USE_OPENAI:
+            # 使用 OpenAI API
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response.choices[0].message.content
+        else:
+            # 使用 DeepSeek API
+            deepseek_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+            response = deepseek_client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response.choices[0].message.content
     
     except Exception as e:
         print(f"调用 LLM API 时出错: {str(e)}")
-        return f"生成响应时出错: {str(e)}"    
+        return f"生成响应时出错: {str(e)}"
 
-@app.route('/api/conversations/<conversation_id>', methods=['DELETE'])
-def delete_conversation(conversation_id):
-    global conversations
-    conversations = [c for c in conversations if c['id'] != conversation_id]
-    return jsonify({'success': True})
+
 
 @app.route('/api/conversations/<conversation_id>', methods=['GET'])
 def get_conversation(conversation_id):
@@ -134,5 +189,13 @@ def get_conversation(conversation_id):
         return jsonify({'error': '未找到对话'}), 404
     return jsonify(conversation)
 
+# 添加一个路由用于清除所有对话历史（谨慎使用）
+@app.route('/api/conversations/clear', methods=['POST'])
+def clear_all_conversations():
+    global conversations
+    conversations = []
+    save_conversations_to_files()
+    return jsonify({'success': True, 'message': '所有对话已清除'})
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)
