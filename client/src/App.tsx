@@ -3,7 +3,9 @@ import { ChatHistory } from './components/ChatHistory';
 import { MessageBubble } from './components/MessageBubble';
 import { ChatInput } from './components/ChatInput';
 import { LoadingIndicator } from './components/LoadingIndicator';
-import type { Conversation, Message } from './types';
+import { AuthPopover } from './components/AuthPopover';
+import { LogIn, LogOut, Moon, Sun } from 'lucide-react';
+import type { Conversation, Message, User } from './types';
 
 // API endpoints
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -12,6 +14,21 @@ function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // 检查localStorage或系统首选项以确定初始深色模式状态
+    if (typeof window !== 'undefined') {
+      // 首先检查localStorage
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme) {
+        return savedTheme === 'dark';
+      }
+      // 然后检查系统首选项
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -271,8 +288,64 @@ function App() {
 
   const currentConversation = conversations.find(conv => conv.id === activeConversation);
 
+  // 处理登录和注册
+  const handleLogin = (email: string, password: string) => {
+    console.log('登录:', email, password);
+    // TODO: 实际登录逻辑实现
+    // 模拟登录成功
+    setUser({
+      id: '1',
+      email,
+      name: email.split('@')[0],
+    });
+    setIsAuthOpen(false);
+  };
+
+  const handleRegister = (email: string, password: string) => {
+    console.log('注册:', email, password);
+    // TODO: 实际注册逻辑实现
+    // 模拟注册成功
+    setUser({
+      id: '1',
+      email,
+      name: email.split('@')[0],
+    });
+    setIsAuthOpen(false);
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+  };
+
+  // 应用深色模式效果
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  // 监听系统深色模式变化
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      setIsDarkMode(e.matches);
+    };
+    
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  // 切换深色模式
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+  };
+
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-white">
       <ChatHistory
         conversations={conversations}
         activeConversation={activeConversation}
@@ -280,10 +353,41 @@ function App() {
         onNewConversation={handleNewConversation}
       />
       
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col relative">
+        {/* 头部导航栏 */}
+        <div className="flex justify-end items-center p-2 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex space-x-2">
+            <button 
+              onClick={toggleDarkMode}
+              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              aria-label={isDarkMode ? '切换到亮色模式' : '切换到暗色模式'}
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            
+            {user ? (
+              <button 
+                onClick={handleLogout}
+                className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-red-500 dark:text-red-400 transition-colors flex items-center"
+              >
+                <LogOut className="w-5 h-5" />
+                <span className="ml-1 text-sm font-medium hidden sm:inline">退出</span>
+              </button>
+            ) : (
+              <button 
+                onClick={() => setIsAuthOpen(true)}
+                className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-blue-500 dark:text-blue-400 transition-colors flex items-center"
+              >
+                <LogIn className="w-5 h-5" />
+                <span className="ml-1 text-sm font-medium hidden sm:inline">登录</span>
+              </button>
+            )}
+          </div>
+        </div>
+        
         <div className="flex-1 overflow-y-auto p-4">
           {currentConversation?.messages.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-gray-500">
+            <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
               开始新的对话...
             </div>
           ) : (
@@ -297,6 +401,14 @@ function App() {
         
         <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
       </main>
+
+      {/* 认证弹窗 */}
+      <AuthPopover 
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+      />
     </div>
   );
 }
