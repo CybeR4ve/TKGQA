@@ -107,50 +107,164 @@ function App() {
       return conv;
     }));
 
-    // Send message to API
     setIsLoading(true);
+    
     try {
-      const response = await fetch(`${API_BASE_URL}/conversations/${activeConversation}/messages`, {
+      // 创建一个临时的系统消息，用于显示流式响应
+      const tempSystemMessage: Message = {
+        id: 'temp-system-' + Date.now().toString(),
+        content: '',
+        sender: 'system' as 'system', // 显式指定类型
+        timestamp: new Date(),
+      };
+      
+      // 添加临时系统消息到UI
+      setConversations(prev => prev.map(conv => {
+        if (conv.id === activeConversation) {
+          return {
+            ...conv,
+            messages: [...conv.messages, tempSystemMessage],
+          };
+        }
+        return conv;
+      }));
+      
+      // 处理流式数据的函数
+      const handleStreamData = (data: any) => {
+        if (data.done) {
+          // 流式传输完成
+          setIsLoading(false);
+          
+          // 替换临时用户消息和系统消息为最终版本
+          setConversations(prev => prev.map(conv => {
+            if (conv.id === activeConversation) {
+              // 找到并替换临时消息
+              const updatedMessages = conv.messages
+                .filter(msg => msg.id !== tempUserMessage.id && msg.id !== tempSystemMessage.id);
+              
+              // 添加最终的用户消息
+              const finalUserMessage: Message = {
+                ...tempUserMessage,
+                id: data.userMessageId || tempUserMessage.id,
+              };
+              
+              // 添加最终的系统消息
+              const finalSystemMessage: Message = {
+                id: data.message_id,
+                content: data.full_response,
+                sender: 'system' as 'system', // 显式指定类型
+                timestamp: new Date(),
+              };
+              
+              return {
+                ...conv,
+                messages: [...updatedMessages, finalUserMessage, finalSystemMessage],
+              };
+            }
+            return conv;
+          }));
+        } else {
+          // 更新临时系统消息的内容
+          setConversations(prev => prev.map(conv => {
+            if (conv.id === activeConversation) {
+              const updatedMessages = conv.messages.map(msg => {
+                if (msg.id === tempSystemMessage.id) {
+                  return {
+                    ...msg,
+                    content: data.full_response || data.content || msg.content,
+                    sender: msg.sender, // 保持原有的sender类型
+                  } as Message;
+                }
+                return msg;
+              });
+              
+              return {
+                ...conv,
+                messages: updatedMessages,
+              };
+            }
+            return conv;
+          }));
+        }
+      };
+
+      // 创建一个自定义的EventSource实现
+      // 因为EventSource默认只支持GET请求，我们使用fetch实现POST请求的流式传输
+      const controller = new AbortController();
+      const { signal } = controller;
+      
+      // 发送POST请求并处理流式响应
+      fetch(`${API_BASE_URL}/conversations/${activeConversation}/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ content }),
+        signal,
+      }).then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        
+        function readStream() {
+          reader.read().then(({ value, done }) => {
+            if (done) {
+              setIsLoading(false);
+              return;
+            }
+            
+            const text = decoder.decode(value);
+            const lines = text.split('\n\n');
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  handleStreamData(data);
+                } catch (e) {
+                  console.error('Error parsing SSE data:', e);
+                }
+              }
+            }
+            
+            readStream();
+          }).catch(err => {
+            console.error('Stream reading error:', err);
+            setIsLoading(false);
+            // 显示错误消息
+            setConversations(prev => prev.map(conv => {
+              if (conv.id === activeConversation) {
+                const updatedMessages = conv.messages.map(msg => {
+                  if (msg.id === tempSystemMessage.id) {
+                    return {
+                      ...msg,
+                      content: '抱歉，发生了错误，请重试。',
+                      sender: msg.sender,
+                    } as Message;
+                  }
+                  return msg;
+                });
+                
+                return {
+                  ...conv,
+                  messages: updatedMessages,
+                };
+              }
+              return conv;
+            }));
+          });
+        }
+        
+        readStream();
+      }).catch(error => {
+        console.error('Fetch error:', error);
+        setIsLoading(false);
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Replace optimistic user message with actual one from server and add system response
-        setConversations(prev => prev.map(conv => {
-          if (conv.id === activeConversation) {
-            // Find and replace the temporary user message
-            const updatedMessages = conv.messages.filter(msg => msg.id !== tempUserMessage.id);
-            
-            // Add the actual messages from the server
-            const userMessage = {
-              ...data.userMessage,
-              timestamp: new Date(data.userMessage.timestamp)
-            };
-            
-            const systemMessage = {
-              ...data.systemMessage,
-              timestamp: new Date(data.systemMessage.timestamp)
-            };
-            
-            return {
-              ...conv,
-              messages: [...updatedMessages, userMessage, systemMessage],
-            };
-          }
-          return conv;
-        }));
-      } else {
-        // If there was an error, keep the optimistic message but show an error
-        console.error('Error sending message:', await response.text());
-      }
     } catch (error) {
-      console.error('Error sending message:', error);
-    } finally {
+      console.error('Error with streaming:', error);
       setIsLoading(false);
     }
   };

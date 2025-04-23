@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect
+from flask import Flask, request, jsonify, render_template, redirect, Response
 from flask_cors import CORS
 import os
 import json
@@ -135,11 +135,12 @@ def send_message(conversation_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-def get_llm_response(prompt, conversation_history):
+def get_llm_response(prompt, conversation_history, stream=False):
     """
     从大型语言模型 API 获取响应。
     支持 OpenAI API 和 DeepSeek API。
     实现多轮对话的上下文传递。
+    可选流式传输模式。
     """
     try:
         # 将对话历史转换为 API 期望的格式
@@ -161,9 +162,14 @@ def get_llm_response(prompt, conversation_history):
                 model=OPENAI_MODEL,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=1000
+                max_tokens=1000,
+                stream=stream
             )
-            return response.choices[0].message.content
+            
+            if stream:
+                return response  # 返回流式响应对象
+            else:
+                return response.choices[0].message.content
         else:
             # 使用 DeepSeek API
             deepseek_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
@@ -171,9 +177,14 @@ def get_llm_response(prompt, conversation_history):
                 model=DEEPSEEK_MODEL,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=1000
+                max_tokens=1000,
+                stream=stream
             )
-            return response.choices[0].message.content
+            
+            if stream:
+                return response  # 返回流式响应对象
+            else:
+                return response.choices[0].message.content
     
     except Exception as e:
         print(f"调用 LLM API 时出错: {str(e)}")
@@ -196,6 +207,86 @@ def clear_all_conversations():
     conversations = []
     save_conversations_to_files()
     return jsonify({'success': True, 'message': '所有对话已清除'})
+
+# 添加流式响应的API端点
+@app.route('/api/conversations/<conversation_id>/stream', methods=['POST'])
+def stream_message(conversation_id):
+    message_content = request.json.get('content')
+    if not message_content:
+        return jsonify({'error': '消息内容不能为空'}), 400
+    
+    # 查找对话
+    conversation = next((c for c in conversations if c['id'] == conversation_id), None)
+    if not conversation:
+        return jsonify({'error': '未找到对话'}), 404
+    
+    # 创建用户消息
+    user_message_id = str(uuid.uuid4())
+    user_message = {
+        'id': user_message_id,
+        'content': message_content,
+        'sender': 'user',
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    # 将用户消息添加到对话中
+    conversation['messages'].append(user_message)
+    
+    # 如果这是第一条消息，更新对话标题
+    if len(conversation['messages']) == 1:
+        conversation['title'] = message_content[:30] + ('...' if len(message_content) > 30 else '')
+    
+    # 使用流式模式获取LLM响应
+    try:
+        # 创建系统消息占位符
+        system_message_id = str(uuid.uuid4())
+        system_message = {
+            'id': system_message_id,
+            'content': '',  # 初始内容为空，将通过流式更新
+            'sender': 'system',
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # 将系统消息添加到对话中
+        conversation['messages'].append(system_message)
+        
+        # 获取流式响应
+        stream_response = get_llm_response(message_content, conversation['messages'][:-1], stream=True)
+        
+        def generate():
+            full_response = ""
+            
+            # 对于OpenAI的流式响应处理
+            for chunk in stream_response:
+                if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+                    content = chunk.choices[0].delta.content or ""
+                    if content:
+                        full_response += content
+                        # 发送数据到前端
+                        yield f"data: {json.dumps({'content': content, 'full_response': full_response, 'message_id': system_message_id, 'userMessageId': user_message_id})}\n\n"
+            
+            # 更新完整的消息内容
+            conversation['messages'][-1]['content'] = full_response
+            save_conversations_to_files()
+            
+            # 发送完成信号
+            yield f"data: {json.dumps({'done': True, 'message_id': system_message_id, 'userMessageId': user_message_id, 'full_response': full_response})}\n\n"
+        
+        # 设置流式响应的头部
+        headers = {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',  # 禁用Nginx缓冲
+            'Connection': 'keep-alive'
+        }
+        
+        return Response(generate(), mimetype='text/event-stream', headers=headers)
+        
+    except Exception as e:
+        # 如果出错，删除最后添加的系统消息
+        conversation['messages'].pop()
+        print(f"流式响应错误: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
