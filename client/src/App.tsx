@@ -211,7 +211,7 @@ function App() {
       const { signal } = controller;
       
       // 发送POST请求并处理流式响应
-      fetch(`${API_BASE_URL}/conversations/${activeConversation}/stream`, {
+      fetch(`${API_BASE_URL}/conversations/${activeConversation}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

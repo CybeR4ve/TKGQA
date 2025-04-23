@@ -45,38 +45,10 @@ def clear_all_conversations():
     ConversationModel.clear_all()
     return jsonify({'success': True, 'message': '所有对话已清除'})
 
+# 移除非流式消息API端点，只保留下面的流式API
+
 @chat_bp.route('/conversations/<conversation_id>/messages', methods=['POST'])
 def send_message(conversation_id):
-    """发送消息并获取响应"""
-    message_content = request.json.get('content')
-    if not message_content:
-        return jsonify({'error': '消息内容不能为空'}), 400
-    
-    # 查找对话
-    conversation = ConversationModel.get_by_id(conversation_id)
-    if not conversation:
-        return jsonify({'error': '未找到对话'}), 404
-    
-    # 创建用户消息
-    user_message = ConversationModel.add_message(conversation_id, message_content, 'user')
-    
-    # 从 LLM API 获取响应
-    try:
-        # 传递完整的对话历史给 LLM API
-        ai_response = get_llm_response(message_content, conversation['messages'])
-        
-        # 创建系统消息
-        system_message = ConversationModel.add_message(conversation_id, ai_response, 'system')
-        
-        return jsonify({
-            'userMessage': user_message,
-            'systemMessage': system_message
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@chat_bp.route('/conversations/<conversation_id>/stream', methods=['POST'])
-def stream_message(conversation_id):
     """流式发送消息并获取响应"""
     message_content = request.json.get('content')
     if not message_content:
@@ -98,7 +70,7 @@ def stream_message(conversation_id):
     # 使用流式模式获取LLM响应
     try:
         # 获取流式响应
-        stream_response = get_llm_response(message_content, conversation['messages'][:-1], stream=True)
+        stream_response = get_llm_response(message_content, conversation['messages'][:-1])
         
         def generate():
             full_response = ""
