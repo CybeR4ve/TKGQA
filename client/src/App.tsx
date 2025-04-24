@@ -22,8 +22,8 @@ function App() {
       if (savedTheme) {
         return savedTheme === 'dark';
       }
-      // 然后检查系统首选项
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+      // 默认使用浅色模式，不再检查系统首选项
+      return false;
     }
     return false;
   });

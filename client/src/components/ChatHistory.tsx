@@ -25,7 +25,7 @@ export function ChatHistory({
   );
 
   return (
-    <aside className="w-[30%] h-screen bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+    <aside className="w-64 h-screen bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
         <button
           onClick={onNewConversation}
