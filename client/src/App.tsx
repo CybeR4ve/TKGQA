@@ -317,14 +317,16 @@ function App() {
     setUser(null);
   };
 
-  // 应用深色模式效果
+  // 应用深色模式
   useEffect(() => {
+    // 保存设置到localStorage
+    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+    
+    // 更新HTML类名
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
 

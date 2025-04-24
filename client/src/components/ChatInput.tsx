@@ -38,7 +38,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="border-t border-gray-200 p-4 bg-white">
+    <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
       <div className="flex items-end space-x-2">
         <div className="relative flex-1">
           <textarea
@@ -47,7 +47,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="输入您的问题..."
-            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[48px] max-h-[200px]"
+            className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[48px] max-h-[200px] bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             disabled={isLoading}
           />
         </div>
@@ -57,7 +57,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
           className={`p-3 rounded-full ${
             message.trim() && !isLoading
               ? 'bg-blue-600 hover:bg-blue-700'
-              : 'bg-gray-300'
+              : 'bg-gray-300 dark:bg-gray-600'
           } transition-colors flex-shrink-0`}
           title="发送"
         >

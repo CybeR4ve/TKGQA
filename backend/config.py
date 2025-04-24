@@ -14,7 +14,7 @@ USE_OPENAI = os.environ.get('USE_OPENAI', 'True').lower() in ('true', '1', 't')
 # API端点配置
 DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
 DEEPSEEK_MODEL = 'deepseek-chat'
-OPENAI_MODEL = 'gpt-3.5-turbo'
+OPENAI_MODEL = 'gpt-4o'
 
 # 聊天历史存储配置
 CHAT_HISTORY_DIR = 'chat_histories'
