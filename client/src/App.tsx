@@ -4,11 +4,10 @@ import { MessageBubble } from './components/MessageBubble';
 import { ChatInput } from './components/ChatInput';
 import { LoadingIndicator } from './components/LoadingIndicator';
 import { AuthPopover } from './components/AuthPopover';
-import { LogIn, LogOut, Moon, Sun } from 'lucide-react';
-import type { Conversation, Message, User } from './types';
-
-// API endpoints
-const API_BASE_URL = 'http://localhost:5000/api';
+import { Moon, Sun, User } from 'lucide-react';
+import type { Conversation, Message, User as UserType } from './types';
+import { API_BASE_URL, CONFIG } from './config';
+import * as api from './services/api';
 
 function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -18,7 +17,7 @@ function App() {
     // 检查localStorage或系统首选项以确定初始深色模式状态
     if (typeof window !== 'undefined') {
       // 首先检查localStorage
-      const savedTheme = localStorage.getItem('theme');
+      const savedTheme = localStorage.getItem(CONFIG.ui.themeStorageKey);
       if (savedTheme) {
         return savedTheme === 'dark';
       }
@@ -28,7 +27,19 @@ function App() {
     return false;
   });
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserType | null>(() => {
+    // 检查本地存储中是否有用户信息和令牌
+    const storedUser = localStorage.getItem(CONFIG.auth.userStorageKey);
+    const storedToken = localStorage.getItem(CONFIG.auth.tokenStorageKey);
+    
+    if (storedUser && storedToken) {
+      return JSON.parse(storedUser);
+    }
+    return null;
+  });
+  const [token, setToken] = useState<string | null>(() => {
+    return localStorage.getItem(CONFIG.auth.tokenStorageKey);
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -37,7 +48,9 @@ function App() {
 
   // Fetch conversations on component mount
   useEffect(() => {
-    fetchConversations();
+    if (user && token) {
+      fetchConversations();
+    }
   }, []);
 
   useEffect(() => {
@@ -47,23 +60,20 @@ function App() {
   // Fetch all conversations from the API
   const fetchConversations = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/conversations`);
-      if (response.ok) {
-        const data = await response.json();
-        // Convert ISO date strings to Date objects
-        const formattedData = data.map((conv: any) => ({
-          ...conv,
-          timestamp: new Date(conv.timestamp),
-          messages: conv.messages.map((msg: any) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp)
-          }))
-        }));
-        
-        setConversations(formattedData);
-        if (formattedData.length > 0 && !activeConversation) {
-          setActiveConversation(formattedData[0].id);
-        }
+      const data = await api.fetchConversations();
+      // Convert ISO date strings to Date objects
+      const formattedData = data.map((conv: any) => ({
+        ...conv,
+        timestamp: new Date(conv.timestamp),
+        messages: conv.messages.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }))
+      }));
+      
+      setConversations(formattedData);
+      if (formattedData.length > 0 && !activeConversation) {
+        setActiveConversation(formattedData[0].id);
       }
     } catch (error) {
       console.error('Error fetching conversations:', error);
@@ -73,24 +83,14 @@ function App() {
   const handleNewConversation = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/conversations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: `新对话 ${conversations.length + 1}`,
-        }),
-      });
-
-      if (response.ok) {
-        const newConversation = await response.json();
-        // Convert ISO date string to Date object
-        newConversation.timestamp = new Date(newConversation.timestamp);
-        
-        setConversations(prev => [newConversation, ...prev]);
-        setActiveConversation(newConversation.id);
-      }
+      const title = `新对话 ${conversations.length + 1}`;
+      const newConversation = await api.createConversation(title);
+      
+      // Convert ISO date string to Date object
+      newConversation.timestamp = new Date(newConversation.timestamp);
+      
+      setConversations(prev => [newConversation, ...prev]);
+      setActiveConversation(newConversation.id);
     } catch (error) {
       console.error('Error creating new conversation:', error);
     } finally {
@@ -213,9 +213,7 @@ function App() {
       // 发送POST请求并处理流式响应
       fetch(`${API_BASE_URL}/conversations/${activeConversation}/messages`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ content }),
         signal,
       }).then(response => {
@@ -289,44 +287,97 @@ function App() {
   const currentConversation = conversations.find(conv => conv.id === activeConversation);
 
   // 处理登录和注册
-  const handleLogin = (email: string, password: string) => {
-    console.log('登录:', email, password);
-    // TODO: 实际登录逻辑实现
-    // 模拟登录成功
-    setUser({
-      id: '1',
-      email,
-      name: email.split('@')[0],
-    });
-    setIsAuthOpen(false);
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      const data = await api.login(email, password);
+      
+      // 保存用户信息和令牌
+      setUser(data.user);
+      setToken(data.token);
+      
+      // 存储到本地存储
+      localStorage.setItem(CONFIG.auth.userStorageKey, JSON.stringify(data.user));
+      localStorage.setItem(CONFIG.auth.tokenStorageKey, data.token);
+      
+      setIsAuthOpen(false);
+      return true;
+    } catch (error) {
+      console.error('登录请求出错:', error);
+      return false;
+    }
   };
 
-  const handleRegister = (email: string, password: string) => {
-    console.log('注册:', email, password);
-    // TODO: 实际注册逻辑实现
-    // 模拟注册成功
-    setUser({
-      id: '1',
-      email,
-      name: email.split('@')[0],
-    });
-    setIsAuthOpen(false);
+  const handleRegister = async (email: string, password: string) => {
+    try {
+      await api.register(email, password);
+      
+      // 注册成功后直接登录
+      return await handleLogin(email, password);
+    } catch (error) {
+      console.error('注册请求出错:', error);
+      return false;
+    }
   };
 
   const handleLogout = () => {
+    // 清除用户状态和令牌
     setUser(null);
+    setToken(null);
+    
+    // 清除本地存储
+    localStorage.removeItem(CONFIG.auth.userStorageKey);
+    localStorage.removeItem(CONFIG.auth.tokenStorageKey);
+    
+    // 清空会话列表
+    setConversations([]);
+    setActiveConversation('');
+    
+    setIsAuthOpen(false);
   };
 
-  // 应用深色模式
+  // 验证存储的令牌
   useEffect(() => {
-    // 保存设置到localStorage
-    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+    const validateToken = async () => {
+      // 如果没有令牌，不需要验证
+      if (!token) return;
+      
+      try {
+        const data = await api.validateToken(token);
+        
+        if (!data.valid) {
+          // 令牌无效，清除用户状态
+          handleLogout();
+        } else {
+          // 令牌有效，刷新会话列表
+          fetchConversations();
+        }
+      } catch (error) {
+        console.error('验证令牌时出错:', error);
+      }
+    };
     
-    // 更新HTML类名
+    validateToken();
+  }, [token]);
+
+  // 当用户登录状态变化时，刷新会话列表
+  useEffect(() => {
+    if (user && token) {
+      fetchConversations();
+    } else {
+      // 用户已登出，清空会话列表
+      setConversations([]);
+      setActiveConversation('');
+    }
+  }, [user, token]);
+
+  // 应用深色模式到document.documentElement
+  useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
+      localStorage.setItem(CONFIG.ui.themeStorageKey, 'dark');
     } else {
       document.documentElement.classList.remove('dark');
+      localStorage.setItem(CONFIG.ui.themeStorageKey, 'light');
     }
   }, [isDarkMode]);
 
@@ -341,76 +392,170 @@ function App() {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
-  // 切换深色模式
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
+  // 删除会话
+  const handleDeleteConversation = async (id: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/conversations/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      
+      if (response.ok) {
+        setConversations(prev => prev.filter(conv => conv.id !== id));
+        if (activeConversation === id) {
+          setActiveConversation(conversations.length > 1 ? conversations.find(c => c.id !== id)?.id || '' : '');
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+    }
+  };
+
+  // 添加授权头部到请求
+  const getAuthHeaders = () => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    return headers;
   };
 
   return (
-    <div className="flex h-screen bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-white">
-      <ChatHistory
-        conversations={conversations}
-        activeConversation={activeConversation}
-        onSelectConversation={setActiveConversation}
-        onNewConversation={handleNewConversation}
-      />
-      
-      <main className="flex-1 flex flex-col relative">
-        {/* 头部导航栏 */}
-        <div className="flex justify-end items-center p-2 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex space-x-2">
-            <button 
-              onClick={toggleDarkMode}
-              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-              aria-label={isDarkMode ? '切换到亮色模式' : '切换到暗色模式'}
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-            
-            {user ? (
-              <button 
-                onClick={handleLogout}
-                className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-red-500 dark:text-red-400 transition-colors flex items-center"
+    <div className={`flex h-screen bg-gray-100 ${isDarkMode ? 'dark' : ''}`}>
+      {/* 侧边栏 */}
+      <div className="w-64 bg-white border-r dark:bg-gray-900 dark:border-gray-700 flex flex-col">
+        <div className="p-4 border-b dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white">智能问答系统</h1>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+                title={isDarkMode ? "切换至亮色模式" : "切换至深色模式"}
               >
-                <LogOut className="w-5 h-5" />
-                <span className="ml-1 text-sm font-medium hidden sm:inline">退出</span>
+                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
               </button>
-            ) : (
-              <button 
-                onClick={() => setIsAuthOpen(true)}
-                className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-blue-500 dark:text-blue-400 transition-colors flex items-center"
+              <button
+                onClick={() => setIsAuthOpen(!isAuthOpen)}
+                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+                title={user ? "查看用户信息" : "登录/注册"}
               >
-                <LogIn className="w-5 h-5" />
-                <span className="ml-1 text-sm font-medium hidden sm:inline">登录</span>
+                {user ? (
+                  <div className="w-[18px] h-[18px] rounded-full bg-blue-500 text-white text-xs flex items-center justify-center font-bold">
+                    {user.email.substring(0, 1).toUpperCase()}
+                  </div>
+                ) : (
+                  <User size={18} />
+                )}
               </button>
-            )}
+            </div>
           </div>
         </div>
-        
-        <div className="flex-1 overflow-y-auto p-4">
-          {currentConversation?.messages.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
-              开始新的对话...
-            </div>
-          ) : (
-            currentConversation?.messages.map(message => (
-              <MessageBubble key={message.id} message={message} />
-            ))
-          )}
-          {isLoading && <LoadingIndicator />}
-          <div ref={messagesEndRef} />
-        </div>
-        
-        <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-      </main>
 
-      {/* 认证弹窗 */}
-      <AuthPopover 
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        onLogin={handleLogin}
-        onRegister={handleRegister}
-      />
+        <div className="p-4">
+          <button
+            onClick={handleNewConversation}
+            disabled={isLoading || !user}
+            className={`w-full py-2 rounded ${
+              !user 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400' 
+                : 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-700'
+            }`}
+            title={user ? "新建对话" : "请先登录"}
+          >
+            新建对话
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <ChatHistory
+            conversations={conversations}
+            activeConversation={activeConversation}
+            onSelect={setActiveConversation}
+            onDelete={handleDeleteConversation}
+          />
+        </div>
+      </div>
+
+      {/* 主内容区域 */}
+      <div className="flex-1 flex flex-col bg-white dark:bg-gray-900">
+        {/* 消息区域 */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="max-w-3xl mx-auto">
+            {activeConversation && (
+              <div className="py-2">
+                <div className="space-y-4">
+                  {conversations.find(c => c.id === activeConversation)?.messages.map((message, index) => (
+                    <MessageBubble key={message.id || index} message={message} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {!activeConversation && (
+              <div className="h-full flex flex-col items-center justify-center p-8">
+                <div className="text-center">
+                  <h3 className="text-xl font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    开始一个新的对话
+                  </h3>
+                  {user ? (
+                    <>
+                      <p className="text-gray-500 dark:text-gray-400 mb-6">
+                        点击左侧的"新建对话"按钮开始交流
+                      </p>
+                      <button
+                        onClick={handleNewConversation}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                      >
+                        新建对话
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-gray-500 dark:text-gray-400 mb-6">
+                        请先登录后开始对话
+                      </p>
+                      <button
+                        onClick={() => setIsAuthOpen(true)}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                      >
+                        登录/注册
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+            {isLoading && !conversations.find(c => c.id === activeConversation)?.messages.some(m => m.id.startsWith('temp-system-')) && (
+              <div className="flex justify-center my-4">
+                <LoadingIndicator />
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+
+        {/* 输入区域 */}
+        <div className="border-t dark:border-gray-700">
+          <div className="max-w-3xl mx-auto p-4">
+            <ChatInput onSendMessage={handleSendMessage} disabled={isLoading || !activeConversation} />
+          </div>
+        </div>
+      </div>
+
+      {/* 认证弹出框 */}
+      {isAuthOpen && (
+        <AuthPopover
+          onClose={() => setIsAuthOpen(false)}
+          onLogin={handleLogin}
+          onRegister={handleRegister}
+          onLogout={handleLogout}
+          user={user}
+        />
+      )}
     </div>
   );
 }

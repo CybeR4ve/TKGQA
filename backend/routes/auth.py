@@ -1,8 +1,43 @@
 from flask import Blueprint, request, jsonify
-from models import UserModel
+from functools import wraps
+import sys
+import os
+
+# 添加父目录到路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from services.auth_service import auth_service
 
 # 创建蓝图
 auth_bp = Blueprint('auth', __name__)
+
+# JWT认证装饰器
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        
+        # 从请求头中获取token
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            if auth_header.startswith('Bearer '):
+                token = auth_header.split(' ')[1]
+        
+        if not token:
+            return jsonify({'error': '缺少认证令牌'}), 401
+        
+        # 验证token
+        user_id = auth_service.verify_jwt_token(token)
+        if not user_id:
+            return jsonify({'error': '无效或已过期的令牌'}), 401
+        
+        # 获取用户信息
+        current_user = auth_service.get_user_by_id(user_id)
+        if not current_user:
+            return jsonify({'error': '未找到用户'}), 401
+        
+        return f(current_user, *args, **kwargs)
+    
+    return decorated
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
@@ -15,11 +50,11 @@ def register():
     if not email or not password:
         return jsonify({'error': '邮箱和密码不能为空'}), 400
     
-    user = UserModel.register(email, password, name)
+    user = auth_service.register_user(email, password, name)
     if not user:
         return jsonify({'error': '此邮箱已被注册'}), 400
     
-    return jsonify(user)
+    return jsonify({'success': True, 'user': user}), 201
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
@@ -31,24 +66,43 @@ def login():
     if not email or not password:
         return jsonify({'error': '邮箱和密码不能为空'}), 400
     
-    user = UserModel.login(email, password)
-    if not user:
+    user, token = auth_service.login_user(email, password)
+    if not user or not token:
         return jsonify({'error': '邮箱或密码不正确'}), 401
     
-    return jsonify(user)
+    return jsonify({
+        'success': True,
+        'user': user,
+        'token': token
+    })
 
-@auth_bp.route('/logout', methods=['POST'])
-def logout():
-    """用户登出API（简单实现，实际应用中应处理会话或令牌）"""
-    return jsonify({'success': True})
+@auth_bp.route('/me', methods=['GET'])
+@token_required
+def get_current_user(current_user):
+    """获取当前用户信息API"""
+    return jsonify({
+        'success': True,
+        'user': current_user
+    })
 
-@auth_bp.route('/user', methods=['GET'])
-def get_current_user():
-    """获取当前用户信息API（简单实现，实际应用中应从会话或令牌中获取用户ID）"""
-    # 这里为了演示，返回一个模拟用户
-    if not UserModel.users:
-        return jsonify({'error': '未找到用户'}), 404
+@auth_bp.route('/validate-token', methods=['POST'])
+def validate_token():
+    """验证令牌有效性API"""
+    data = request.json
+    token = data.get('token')
     
-    user = UserModel.users[0]
-    user_info = {k: v for k, v in user.items() if k != 'password'}
-    return jsonify(user_info)
+    if not token:
+        return jsonify({'error': '缺少令牌'}), 400
+    
+    user_id = auth_service.verify_jwt_token(token)
+    if not user_id:
+        return jsonify({'valid': False}), 200
+    
+    current_user = auth_service.get_user_by_id(user_id)
+    if not current_user:
+        return jsonify({'valid': False}), 200
+    
+    return jsonify({
+        'valid': True,
+        'user': current_user
+    })
