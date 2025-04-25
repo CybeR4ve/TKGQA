@@ -58,23 +58,23 @@ export function ChatInput({ onSendMessage, isLoading, disabled }: ChatInputProps
 
   return (
     <form onSubmit={handleSubmit} className="relative">
-      <textarea
-        ref={textareaRef}
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="输入您的问题..."
+          <textarea
+            ref={textareaRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="输入您的问题..."
         className={`w-full px-4 py-3 pr-12 rounded-xl border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[48px] max-h-[200px] bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${
           showScrollbar ? 'scrollbar-auto-hide' : 'overflow-hidden'
         }`}
         disabled={isLoading || disabled}
-      />
-      <button
-        type="submit"
+          />
+        <button
+          type="submit"
         disabled={!message.trim() || isLoading || disabled}
         className="absolute right-3 bottom-3 p-2 rounded-full transition-colors"
-        title="发送"
-      >
+          title="发送"
+        >
         <Send 
           className={`h-5 w-5 ${
             message.trim() && !isLoading && !disabled
@@ -82,7 +82,7 @@ export function ChatInput({ onSendMessage, isLoading, disabled }: ChatInputProps
               : 'text-gray-400 dark:text-gray-500'
           }`}
         />
-      </button>
+        </button>
     </form>
   );
 }

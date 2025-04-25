@@ -2,6 +2,14 @@ import React, { useState } from 'react';
 import { LogIn, LogOut, UserPlus, X, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import type { User } from '../types';
 
+// 添加隐藏浏览器原生密码显示按钮的样式
+const hidePasswordRevealStyle = `
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
+`;
+
 interface AuthPopoverProps {
   onClose: () => void;
   onLogin?: (email: string, password: string) => Promise<boolean>;
@@ -75,6 +83,9 @@ export function AuthPopover({
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 animate-fadeIn"
     >
+      {/* 添加全局样式隐藏浏览器原生密码显示按钮 */}
+      <style>{hidePasswordRevealStyle}</style>
+      
       <div 
         className="w-full max-w-md rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden transform transition-all animate-slideIn"
       >
@@ -116,44 +127,82 @@ export function AuthPopover({
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="p-5 space-y-5">
-            {error && (
-              <div className="p-3 mb-3 text-sm text-red-500 bg-red-100 dark:bg-red-900/30 dark:text-red-300 rounded-md">
-                {error}
-              </div>
-            )}
-            
-            <div className="space-y-4">
+        <form onSubmit={handleSubmit} className="p-5 space-y-5">
+          {error && (
+            <div className="p-3 mb-3 text-sm text-red-500 bg-red-100 dark:bg-red-900/30 dark:text-red-300 rounded-md">
+              {error}
+            </div>
+          )}
+          
+          <div className="space-y-4">
+            <div className="relative">
+              <label 
+                htmlFor="email" 
+                className="block text-sm font-medium mb-1.5 text-gray-500 dark:text-gray-400"
+              >
+                邮箱地址
+              </label>
               <div className="relative">
-                <label 
-                  htmlFor="email" 
-                  className="block text-sm font-medium mb-1.5 text-gray-500 dark:text-gray-400"
-                >
-                  邮箱地址
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <Mail className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                  </div>
-                  <input
-                    type="email"
-                    id="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full py-2.5 pl-10 pr-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white"
-                    placeholder="your@email.com"
-                    required
-                    disabled={isSubmitting}
-                  />
+                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                  <Mail className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                 </div>
+                <input
+                  type="email"
+                  id="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full py-2.5 pl-10 pr-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white"
+                  placeholder="your@email.com"
+                  required
+                  disabled={isSubmitting}
+                />
               </div>
+            </div>
 
+            <div className="relative">
+              <label 
+                htmlFor="password" 
+                className="block text-sm font-medium mb-1.5 text-gray-500 dark:text-gray-400"
+              >
+                密码
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                  <Lock className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full py-2.5 pl-10 pr-10 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white"
+                  placeholder="••••••••"
+                  required
+                  disabled={isSubmitting}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={isSubmitting}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {mode === 'register' && (
               <div className="relative">
                 <label 
-                  htmlFor="password" 
+                  htmlFor="confirmPassword" 
                   className="block text-sm font-medium mb-1.5 text-gray-500 dark:text-gray-400"
                 >
-                  密码
+                  确认密码
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -161,76 +210,40 @@ export function AuthPopover({
                   </div>
                   <input
                     type={showPassword ? "text" : "password"}
-                    id="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    id="confirmPassword"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
                     className="w-full py-2.5 pl-10 pr-10 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white"
                     placeholder="••••••••"
                     required
                     disabled={isSubmitting}
+                    autoComplete="new-password"
                   />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 flex items-center pr-3"
-                    onClick={() => setShowPassword(!showPassword)}
-                    disabled={isSubmitting}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    )}
-                  </button>
                 </div>
               </div>
-
-              {mode === 'register' && (
-                <div className="relative">
-                  <label 
-                    htmlFor="confirmPassword" 
-                    className="block text-sm font-medium mb-1.5 text-gray-500 dark:text-gray-400"
-                  >
-                    确认密码
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                      <Lock className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    </div>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      id="confirmPassword"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full py-2.5 pl-10 pr-10 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white"
-                      placeholder="••••••••"
-                      required
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                </div>
-              )}
-              
-              <button
-                type="submit"
-                className={`w-full py-2.5 px-4 ${
-                  isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-700'
-                } text-white font-medium rounded-md transition-colors flex items-center justify-center`}
-                disabled={isSubmitting}
-              >
-                {mode === 'login' ? (
-                  <>
-                    <LogIn className="w-4 h-4 mr-2" />
-                    {isSubmitting ? '登录中...' : '登录'}
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    {isSubmitting ? '注册中...' : '注册'}
-                  </>
-                )}
-              </button>
-            </div>
+            )}
             
+            <button
+              type="submit"
+              className={`w-full py-2.5 px-4 ${
+                isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-700'
+              } text-white font-medium rounded-md transition-colors flex items-center justify-center`}
+              disabled={isSubmitting}
+            >
+              {mode === 'login' ? (
+                <>
+                  <LogIn className="w-4 h-4 mr-2" />
+                  {isSubmitting ? '登录中...' : '登录'}
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  {isSubmitting ? '注册中...' : '注册'}
+                </>
+              )}
+            </button>
+            </div>
+
             <div className="text-center mt-4">
               <button
                 type="button"
@@ -240,8 +253,8 @@ export function AuthPopover({
               >
                 {mode === 'login' ? '没有账号？点击注册' : '已有账号？点击登录'}
               </button>
-            </div>
-          </form>
+          </div>
+        </form>
         )}
       </div>
     </div>

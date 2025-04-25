@@ -67,13 +67,13 @@ export function ChatHistory({
             >
               <h3 className="font-medium text-gray-900 dark:text-white truncate text-sm">{conversation.title}</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
-                {conversation.messages[conversation.messages.length - 1]?.content || '暂无消息'}
-              </p>
+              {conversation.messages[conversation.messages.length - 1]?.content || '暂无消息'}
+            </p>
               <div className="flex items-center mt-1 text-xs text-gray-500 dark:text-gray-400">
                 <Clock className="h-3 w-3 mr-1" />
-                {new Date(conversation.timestamp).toLocaleDateString('zh-CN')}
-              </div>
-            </button>
+              {new Date(conversation.timestamp).toLocaleDateString('zh-CN')}
+            </div>
+          </button>
             <button 
               onClick={() => onDelete(conversation.id)}
               className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"

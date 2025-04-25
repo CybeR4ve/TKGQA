@@ -66,13 +66,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <div className="mb-4 max-w-3xl mx-auto">
       <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-        <div
+      <div
           className={`rounded-lg px-4 py-3 ${
-            isUser
-              ? 'bg-blue-600 text-white dark:bg-blue-700'
+          isUser
+            ? 'bg-blue-600 text-white dark:bg-blue-700'
               : 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
           } max-w-[85%]`}
-        >
+      >
           {renderContent()}
         </div>
       </div>

@@ -49,7 +49,7 @@ function App() {
   // Fetch conversations on component mount
   useEffect(() => {
     if (user && token) {
-      fetchConversations();
+    fetchConversations();
     }
   }, []);
 
@@ -61,19 +61,19 @@ function App() {
   const fetchConversations = async () => {
     try {
       const data = await api.fetchConversations();
-      // Convert ISO date strings to Date objects
-      const formattedData = data.map((conv: any) => ({
-        ...conv,
-        timestamp: new Date(conv.timestamp),
-        messages: conv.messages.map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp)
-        }))
-      }));
-      
-      setConversations(formattedData);
-      if (formattedData.length > 0 && !activeConversation) {
-        setActiveConversation(formattedData[0].id);
+        // Convert ISO date strings to Date objects
+        const formattedData = data.map((conv: any) => ({
+          ...conv,
+          timestamp: new Date(conv.timestamp),
+          messages: conv.messages.map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
+        }));
+        
+        setConversations(formattedData);
+        if (formattedData.length > 0 && !activeConversation) {
+          setActiveConversation(formattedData[0].id);
       }
     } catch (error) {
       console.error('Error fetching conversations:', error);
@@ -86,11 +86,11 @@ function App() {
       const title = `新对话 ${conversations.length + 1}`;
       const newConversation = await api.createConversation(title);
       
-      // Convert ISO date string to Date object
-      newConversation.timestamp = new Date(newConversation.timestamp);
-      
-      setConversations(prev => [newConversation, ...prev]);
-      setActiveConversation(newConversation.id);
+        // Convert ISO date string to Date object
+        newConversation.timestamp = new Date(newConversation.timestamp);
+        
+        setConversations(prev => [newConversation, ...prev]);
+        setActiveConversation(newConversation.id);
     } catch (error) {
       console.error('Error creating new conversation:', error);
     } finally {
@@ -299,7 +299,7 @@ function App() {
       localStorage.setItem(CONFIG.auth.userStorageKey, JSON.stringify(data.user));
       localStorage.setItem(CONFIG.auth.tokenStorageKey, data.token);
       
-      setIsAuthOpen(false);
+    setIsAuthOpen(false);
       return true;
     } catch (error) {
       console.error('登录请求出错:', error);
@@ -431,15 +431,15 @@ function App() {
         <div className="p-4 border-b dark:border-gray-700">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-gray-800 dark:text-white">智能问答系统</h1>
-            <div className="flex space-x-2">
-              <button
+          <div className="flex space-x-2">
+            <button 
                 onClick={() => setIsDarkMode(!isDarkMode)}
                 className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
                 title={isDarkMode ? "切换至亮色模式" : "切换至深色模式"}
-              >
+            >
                 {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
               </button>
-              <button
+              <button 
                 onClick={() => setIsAuthOpen(!isAuthOpen)}
                 className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
                 title={user ? "查看用户信息" : "登录/注册"}
@@ -455,7 +455,7 @@ function App() {
             </div>
           </div>
         </div>
-
+        
         <div className="p-4">
           <button
             onClick={handleNewConversation}
@@ -493,17 +493,17 @@ function App() {
                     <MessageBubble key={message.id || index} message={message} />
                   ))}
                 </div>
-              </div>
+            </div>
             )}
             {!activeConversation && (
               <div className="h-full flex flex-col items-center justify-center p-8">
-                <div className="text-center">
-                  <h3 className="text-xl font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <div className="text-center mt-20">
+                  <h3 className="text-xl font-medium text-gray-700 dark:text-gray-300 mb-6">
                     开始一个新的对话
                   </h3>
                   {user ? (
                     <>
-                      <p className="text-gray-500 dark:text-gray-400 mb-6">
+                      <p className="text-gray-500 dark:text-gray-400 mb-8">
                         点击左侧的"新建对话"按钮开始交流
                       </p>
                       <button
@@ -515,7 +515,7 @@ function App() {
                     </>
                   ) : (
                     <>
-                      <p className="text-gray-500 dark:text-gray-400 mb-6">
+                      <p className="text-gray-500 dark:text-gray-400 mb-8">
                         请先登录后开始对话
                       </p>
                       <button
@@ -528,16 +528,16 @@ function App() {
                   )}
                 </div>
               </div>
-            )}
+          )}
             {isLoading && !conversations.find(c => c.id === activeConversation)?.messages.some(m => m.id.startsWith('temp-system-')) && (
               <div className="flex justify-center my-4">
                 <LoadingIndicator />
               </div>
             )}
-            <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} />
           </div>
         </div>
-
+        
         {/* 输入区域 */}
         <div className="border-t dark:border-gray-700">
           <div className="max-w-3xl mx-auto p-4">
@@ -548,13 +548,13 @@ function App() {
 
       {/* 认证弹出框 */}
       {isAuthOpen && (
-        <AuthPopover
-          onClose={() => setIsAuthOpen(false)}
-          onLogin={handleLogin}
-          onRegister={handleRegister}
+      <AuthPopover 
+        onClose={() => setIsAuthOpen(false)}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
           onLogout={handleLogout}
           user={user}
-        />
+      />
       )}
     </div>
   );
