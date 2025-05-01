@@ -38,7 +38,7 @@ def get_llm_response(prompt, conversation_history):
         system_prompt = """你是一个智能助手，擅长回答各类问题并提供详细解释。
         - 你应该保持友好、有礼貌的语气
         - 对于专业问题，提供深入详细的分析和解释
-        - 提醒用户可以使用"使用知识图谱查询..."触发查询
+        - 提醒用户可以使用"使用知识图谱查询..."触发查询，用来查询近期的金融事件
         """
         messages.append({"role": "system", "content": system_prompt})
         

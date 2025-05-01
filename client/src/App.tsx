@@ -4,7 +4,8 @@ import { MessageBubble } from './components/MessageBubble';
 import { ChatInput } from './components/ChatInput';
 import { LoadingIndicator } from './components/LoadingIndicator';
 import { AuthPopover } from './components/AuthPopover';
-import { Moon, Sun, User } from 'lucide-react';
+import { GraphPage } from './components/GraphPage';
+import { Moon, Sun, User, BarChart2 } from 'lucide-react';
 import type { Conversation, Message, User as UserType } from './types';
 import { API_BASE_URL, CONFIG } from './config';
 import * as api from './services/api';
@@ -42,6 +43,7 @@ function App() {
   const [token, setToken] = useState<string | null>(() => {
     return localStorage.getItem(CONFIG.auth.tokenStorageKey);
   });
+  const [currentView, setCurrentView] = useState<'chat' | 'graph'>('chat');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // 添加控制器引用，用于中断请求
@@ -1011,159 +1013,225 @@ function App() {
     }
   };
 
+  // 添加处理重命名对话的函数
+  const handleRenameConversation = async (id: string, newTitle: string) => {
+    try {
+      await api.updateConversationTitle(id, newTitle);
+      setConversations(prev => prev.map(conv => {
+        if (conv.id === id) {
+          return {
+            ...conv,
+            title: newTitle
+          };
+        }
+        return conv;
+      }));
+    } catch (error) {
+      console.error('Error renaming conversation:', error);
+    }
+  };
+
   return (
-    <div className={`flex h-screen bg-gray-50 ${isDarkMode ? 'dark' : ''}`}>
-      {/* 侧边栏 - 增强颜色区分和视觉层次 */}
-      <div className="w-72 bg-white border-r dark:bg-gray-800 dark:border-gray-700 flex flex-col shadow-sm">
-        <div className="p-4 border-b dark:border-gray-700 bg-gradient-to-r from-blue-50 to-white dark:from-gray-700 dark:to-gray-800">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-gray-800 dark:text-white">智能问答系统</h1>
+    <div className={`flex h-screen flex-col ${isDarkMode ? 'dark bg-gray-900 text-white' : 'bg-gray-100'}`}>
+      {/* 顶部导航栏 */}
+      <header className={`border-b ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} py-3 px-4 flex justify-between items-center`}>
+        <div className="flex items-center space-x-4">
+          <h1 className="text-xl font-bold">TKGQA 系统</h1>
           <div className="flex space-x-2">
-            <button 
-                onClick={() => setIsDarkMode(!isDarkMode)}
-                className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
-                title={isDarkMode ? "切换至亮色模式" : "切换至深色模式"}
+            <button
+              onClick={() => setCurrentView('chat')}
+              className={`px-4 py-2 rounded-md ${
+                currentView === 'chat' 
+                  ? (isDarkMode ? 'bg-gray-700 text-white' : 'bg-blue-500 text-white') 
+                  : (isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100')
+              }`}
             >
-                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
-              <button 
-                onClick={() => setIsAuthOpen(!isAuthOpen)}
-                className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
-                title={user ? "查看用户信息" : "登录/注册"}
-              >
-                {user ? (
-                  <div className="w-[18px] h-[18px] rounded-full bg-blue-500 text-white text-xs flex items-center justify-center font-bold">
-                    {user.email.substring(0, 1).toUpperCase()}
+              聊天
+            </button>
+            <button
+              onClick={() => setCurrentView('graph')}
+              className={`px-4 py-2 rounded-md flex items-center ${
+                currentView === 'graph' 
+                  ? (isDarkMode ? 'bg-gray-700 text-white' : 'bg-blue-500 text-white') 
+                  : (isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100')
+              }`}
+            >
+              <BarChart2 className="w-4 h-4 mr-1" />
+              图谱可视化
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => {
+              const newMode = !isDarkMode;
+              setIsDarkMode(newMode);
+              localStorage.setItem(CONFIG.ui.themeStorageKey, newMode ? 'dark' : 'light');
+            }}
+            className={`p-2 rounded-full ${isDarkMode ? 'bg-gray-700 text-yellow-300' : 'bg-gray-200 text-gray-700'}`}
+            aria-label="切换深色模式"
+          >
+            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+
+          <div className="relative">
+            <button
+              onClick={() => setIsAuthOpen(!isAuthOpen)}
+              className={`p-2 rounded-full ${
+                isDarkMode ? 'bg-gray-700 text-blue-300' : 'bg-gray-200 text-blue-500'
+              } flex items-center`}
+              aria-label="用户账户"
+            >
+              <User className="w-5 h-5" />
+            </button>
+            {isAuthOpen && (
+              <AuthPopover
+                onClose={() => setIsAuthOpen(false)}
+                onLogin={handleLogin}
+                onRegister={handleRegister}
+                onLogout={handleLogout}
+                isLoading={isLoadingAuth}
+                user={user}
+              />
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* 主要内容区域 */}
+      <div className="flex-1 flex overflow-hidden">
+        {currentView === 'chat' ? (
+          <>
+            {/* 侧边栏 - 对话列表 */}
+            <div className="w-72 bg-white border-r dark:bg-gray-800 dark:border-gray-700 flex flex-col shadow-sm">
+              <div className="p-4 border-b dark:border-gray-700 bg-gradient-to-r from-blue-50 to-white dark:from-gray-700 dark:to-gray-800">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-xl font-bold text-gray-800 dark:text-white">智能问答系统</h1>
+                </div>
+              </div>
+              
+              <div className="p-4 bg-gray-50 dark:bg-gray-750">
+                <button
+                  onClick={handleNewConversation}
+                  disabled={isLoading || !user}
+                  className={`w-full py-2.5 px-4 rounded-lg ${
+                    !user 
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400' 
+                      : 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-700'
+                  } flex items-center justify-center shadow-sm transition-colors`}
+                  title={user ? "新建对话" : "请先登录"}
+                >
+                  {isLoading ? (
+                    <LoadingIndicator size="small" color="neutral" className="py-0" />
+                  ) : "新建对话"}
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-750">
+                {isLoadingConversations ? (
+                  <div className="flex justify-center py-4">
+                    <LoadingIndicator color="primary" />
                   </div>
                 ) : (
-                  <User size={18} />
+                <ChatHistory
+                  conversations={conversations}
+                  activeConversation={activeConversation}
+                  onSelect={setActiveConversation}
+                  onDelete={handleDeleteConversation}
+                  onRefreshConversations={fetchConversations}
+                />
                 )}
-              </button>
+              </div>
             </div>
-          </div>
-        </div>
-        
-        <div className="p-4 bg-gray-50 dark:bg-gray-750">
-          <button
-            onClick={handleNewConversation}
-            disabled={isLoading || !user}
-            className={`w-full py-2.5 px-4 rounded-lg ${
-              !user 
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400' 
-                : 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-700'
-            } flex items-center justify-center shadow-sm transition-colors`}
-            title={user ? "新建对话" : "请先登录"}
-          >
-            {isLoading ? (
-              <LoadingIndicator size="small" color="neutral" className="py-0" />
-            ) : "新建对话"}
-          </button>
-        </div>
 
-        <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-750">
-          {isLoadingConversations ? (
-            <div className="flex justify-center py-4">
-              <LoadingIndicator color="primary" />
-            </div>
-          ) : (
-          <ChatHistory
-            conversations={conversations}
-            activeConversation={activeConversation}
-            onSelect={setActiveConversation}
-            onDelete={handleDeleteConversation}
-            onRefreshConversations={fetchConversations}
-          />
-          )}
-        </div>
-      </div>
-
-      {/* 主内容区域 - 更现代化的设计 */}
-      <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 relative">
-        {/* 消息区域 */}
-        <div className="flex-1 overflow-y-auto input-scrollbar p-4 bg-gray-100 dark:bg-gray-850">
-          <div className="max-w-3xl mx-auto">
-            {activeConversation && (
-              <div className="py-2">
-                <div className="space-y-4">
-                  {conversations.find(c => c.id === activeConversation)?.messages.map((message, index) => (
-                    <MessageBubble 
-                      key={message.id || index} 
-                      message={message} 
-                      onRegenerate={message.sender === 'system' ? handleRegenerateMessage : undefined}
-                      onEditMessage={message.sender === 'user' ? handleEditMessage : undefined}
-                    />
-                  ))}
-                </div>
-            </div>
-            )}
-            {!activeConversation && (
-              <div className="h-full flex flex-col items-center justify-center p-8">
-                <div className="text-center mt-20 max-w-md w-full mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm">
-                  <h3 className="text-xl font-medium text-gray-700 dark:text-gray-300 mb-6">
-                    开始一个新的对话
-                  </h3>
-                  {user ? (
-                    <>
-                      <p className="text-gray-500 dark:text-gray-400 mb-8">
-                        点击左侧的"新建对话"按钮开始交流
-                      </p>
-                      <button
-                        onClick={handleNewConversation}
-                        disabled={isLoading}
-                        className="px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center justify-center mx-auto shadow-sm transition-colors dark:bg-blue-600 dark:hover:bg-blue-700"
-                      >
-                        {isLoading ? (
-                          <LoadingIndicator size="small" color="neutral" className="py-0" />
-                        ) : "新建对话"}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-gray-500 dark:text-gray-400 mb-8">
-                        请先登录后开始对话
-                      </p>
-                      <button
-                        onClick={() => setIsAuthOpen(true)}
-                        className="px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center justify-center mx-auto shadow-sm transition-colors dark:bg-blue-600 dark:hover:bg-blue-700"
-                      >
-                        {isLoadingAuth && !isAuthOpen ? (
-                          <LoadingIndicator size="small" color="neutral" className="py-0" />
-                        ) : "登录/注册"}
-                      </button>
-                    </>
+            {/* 主内容区域 - 更现代化的设计 */}
+            <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 relative">
+              {/* 消息区域 */}
+              <div className="flex-1 overflow-y-auto input-scrollbar p-4 bg-gray-100 dark:bg-gray-850">
+                <div className="max-w-3xl mx-auto">
+                  {activeConversation && (
+                    <div className="py-2">
+                      <div className="space-y-4">
+                        {conversations.find(c => c.id === activeConversation)?.messages.map((message, index) => (
+                          <MessageBubble 
+                            key={message.id || index} 
+                            message={message} 
+                            onRegenerate={message.sender === 'system' ? handleRegenerateMessage : undefined}
+                            onEditMessage={message.sender === 'user' ? handleEditMessage : undefined}
+                          />
+                        ))}
+                      </div>
+                  </div>
                   )}
+                  {!activeConversation && (
+                    <div className="h-full flex flex-col items-center justify-center p-8">
+                      <div className="text-center mt-20 max-w-md w-full mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm">
+                        <h3 className="text-xl font-medium text-gray-700 dark:text-gray-300 mb-6">
+                          开始一个新的对话
+                        </h3>
+                        {user ? (
+                          <>
+                            <p className="text-gray-500 dark:text-gray-400 mb-8">
+                              点击左侧的"新建对话"按钮开始交流
+                            </p>
+                            <button
+                              onClick={handleNewConversation}
+                              disabled={isLoading}
+                              className="px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center justify-center mx-auto shadow-sm transition-colors dark:bg-blue-600 dark:hover:bg-blue-700"
+                            >
+                              {isLoading ? (
+                                <LoadingIndicator size="small" color="neutral" className="py-0" />
+                              ) : "新建对话"}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-gray-500 dark:text-gray-400 mb-8">
+                              请先登录后开始对话
+                            </p>
+                            <button
+                              onClick={() => setIsAuthOpen(true)}
+                              className="px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center justify-center mx-auto shadow-sm transition-colors dark:bg-blue-600 dark:hover:bg-blue-700"
+                            >
+                              {isLoadingAuth && !isAuthOpen ? (
+                                <LoadingIndicator size="small" color="neutral" className="py-0" />
+                              ) : "登录/注册"}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                )}
+                  {/* 加载指示器 */}
+                  {isLoading && (
+                    <div className="flex justify-center my-4">
+                      <LoadingIndicator color="primary" size="medium" />
+                    </div>
+                  )}
+                <div ref={messagesEndRef} />
                 </div>
               </div>
-          )}
-            {/* 加载指示器 */}
-            {isLoading && (
-              <div className="flex justify-center my-4">
-                <LoadingIndicator color="primary" size="medium" />
+              
+              {/* 输入区域 */}
+              <div className="border-t dark:border-gray-700 bg-white dark:bg-gray-800">
+                <div className="max-w-3xl mx-auto p-3">
+                  <ChatInput 
+                    onSendMessage={handleSendMessage} 
+                    onAbortGeneration={handleAbortGeneration} 
+                    disabled={isLoading || !activeConversation} 
+                    isLoading={isLoading} 
+                  />
+                </div>
               </div>
-            )}
-          <div ref={messagesEndRef} />
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 overflow-y-auto">
+            <GraphPage />
           </div>
-        </div>
-        
-        {/* 输入区域 */}
-        <div className="border-t dark:border-gray-700 bg-white dark:bg-gray-800">
-          <div className="max-w-3xl mx-auto p-3">
-            <ChatInput onSendMessage={handleSendMessage} onAbortGeneration={handleAbortGeneration} disabled={isLoading || !activeConversation} isLoading={isLoading} />
-          </div>
-        </div>
+        )}
       </div>
-
-      {/* 认证弹出框 */}
-      {isAuthOpen && (
-      <AuthPopover 
-        onClose={() => setIsAuthOpen(false)}
-        onLogin={handleLogin}
-        onRegister={handleRegister}
-          onLogout={handleLogout}
-          user={user}
-          isLoading={isLoadingAuth}
-      />
-      )}
     </div>
   );
 }

@@ -22,6 +22,10 @@ export const CONFIG = {
     register: `${API_BASE_URL}/auth/register`,
     validateToken: `${API_BASE_URL}/auth/validate-token`,
     me: `${API_BASE_URL}/auth/me`,
+    
+    // 知识图谱相关
+    kgQuery: `${API_BASE_URL}/kg/query`,
+    kgVisualizationData: `${API_BASE_URL}/kg/visualization-data`,
   },
   
   // UI相关

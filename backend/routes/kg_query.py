@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, render_template
 import json
 import sys
 import os
@@ -76,4 +76,43 @@ def query_knowledge_graph():
     except Exception as e:
         print(f"知识图谱查询API出错: {str(e)}")
         print(f"错误详情: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@kg_bp.route('/visualization-data', methods=['POST'])
+def get_visualization_data():
+    """
+    获取用于可视化的Neo4j数据
+    
+    请求体:
+    {
+        "cypher": "MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 50"  // 自定义Cypher查询
+    }
+    
+    响应:
+    {
+        "status": "success",
+        "data": [...]  // Neo4j查询结果
+    }
+    """
+    try:
+        data = request.json
+        if not data or 'cypher' not in data:
+            # 如果没有提供查询语句，使用默认查询
+            cypher_query = "MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 50"
+        else:
+            cypher_query = data['cypher']
+        
+        print(f"收到Neo4j可视化数据请求，查询: {cypher_query}")
+        
+        # 执行Cypher查询
+        query_result = neo4j_service.run_query(cypher_query)
+        print(f"可视化数据查询结果条数: {len(query_result)}")
+        
+        return jsonify({
+            'status': 'success',
+            'data': query_result
+        })
+        
+    except Exception as e:
+        print(f"获取Neo4j可视化数据API出错: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 500 
