@@ -43,6 +43,11 @@ function App() {
     return localStorage.getItem(CONFIG.auth.tokenStorageKey);
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // 添加控制器引用，用于中断请求
+  const abortControllerRef = useRef<AbortController | null>(null);
+  // 添加标志，标识是否是用户主动中断
+  const isUserAbortingRef = useRef<boolean>(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -167,6 +172,9 @@ function App() {
           // 流式传输完成
           setIsLoading(false);
           
+          // 重置中断控制器
+          abortControllerRef.current = null;
+          
           // 替换临时用户消息和系统消息为最终版本
           setConversations((prev: Conversation[]) => {
             // 先找到当前会话
@@ -236,9 +244,9 @@ function App() {
         }
       };
 
-      // 创建一个自定义的EventSource实现
-      // 因为EventSource默认只支持GET请求，我们使用fetch实现POST请求的流式传输
+      // 创建一个新的AbortController
       const controller = new AbortController();
+      abortControllerRef.current = controller;
       const { signal } = controller;
       
       // 发送POST请求并处理流式响应
@@ -280,27 +288,56 @@ function App() {
           }).catch(err => {
             console.error('Stream reading error:', err);
             setIsLoading(false);
-            // 显示错误消息
-            setConversations(prev => prev.map(conv => {
-              if (conv.id === activeConversation) {
-                const updatedMessages = conv.messages.map(msg => {
-                  if (msg.id === tempSystemMessage.id) {
-                    return {
-                      ...msg,
-                      content: '抱歉，发生了错误，请重试。',
-                      sender: msg.sender,
-                    } as Message;
-                  }
-                  return msg;
-                });
-                
-                return {
-                  ...conv,
-                  messages: updatedMessages,
-                };
-              }
-              return conv;
-            }));
+            
+            // 区分用户主动中断和真正的错误
+            if (isUserAbortingRef.current) {
+              // 用户主动中断，保留已生成的内容
+              setConversations(prev => prev.map(conv => {
+                if (conv.id === activeConversation) {
+                  const updatedMessages = conv.messages.map(msg => {
+                    if (msg.id === tempSystemMessage.id) {
+                      return {
+                        ...msg,
+                        content: msg.content + '\n\n*生成已被用户中断*',
+                        sender: msg.sender,
+                      } as Message;
+                    }
+                    return msg;
+                  });
+                  
+                  return {
+                    ...conv,
+                    messages: updatedMessages,
+                  };
+                }
+                return conv;
+              }));
+              
+              // 重置中断标志
+              isUserAbortingRef.current = false;
+            } else {
+              // 真正的错误
+              setConversations(prev => prev.map(conv => {
+                if (conv.id === activeConversation) {
+                  const updatedMessages = conv.messages.map(msg => {
+                    if (msg.id === tempSystemMessage.id) {
+                      return {
+                        ...msg,
+                        content: '抱歉，发生了错误，请重试。',
+                        sender: msg.sender,
+                      } as Message;
+                    }
+                    return msg;
+                  });
+                  
+                  return {
+                    ...conv,
+                    messages: updatedMessages,
+                  };
+                }
+                return conv;
+              }));
+            }
           });
         }
         
@@ -460,6 +497,36 @@ function App() {
     return headers;
   };
 
+  // 添加中断生成的函数
+  const handleAbortGeneration = async () => {
+    if (!activeConversation) return;
+    
+    try {
+      // 设置标志，标识这是用户主动中断
+      isUserAbortingRef.current = true;
+      
+      // 1. 中断当前的fetch请求
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      
+      // 2. 通知后端中断生成
+      await fetch(`${API_BASE_URL}/conversations/${activeConversation}/abort`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      
+      setIsLoading(false);
+    } catch (error) {
+      console.error('中断生成时出错:', error);
+      // 即使出错也要重置加载状态
+      setIsLoading(false);
+      // 重置中断标志
+      isUserAbortingRef.current = false;
+    }
+  };
+
   return (
     <div className={`flex h-screen bg-gray-50 ${isDarkMode ? 'dark' : ''}`}>
       {/* 侧边栏 - 增强颜色区分和视觉层次 */}
@@ -592,7 +659,7 @@ function App() {
         {/* 输入区域 */}
         <div className="border-t dark:border-gray-700 bg-white dark:bg-gray-800">
           <div className="max-w-3xl mx-auto p-3">
-            <ChatInput onSendMessage={handleSendMessage} disabled={isLoading || !activeConversation} isLoading={isLoading} />
+            <ChatInput onSendMessage={handleSendMessage} onAbortGeneration={handleAbortGeneration} disabled={isLoading || !activeConversation} isLoading={isLoading} />
           </div>
         </div>
       </div>

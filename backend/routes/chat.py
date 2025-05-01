@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, g
 import json
 import uuid
 from datetime import datetime
@@ -35,6 +35,9 @@ def is_kg_query(query):
         if re.search(pattern, query, re.IGNORECASE):
             return True
     return False
+
+# 创建一个全局字典用于存储活跃的生成任务
+active_generations = {}
 
 @chat_bp.route('/conversations', methods=['GET'])
 @token_required
@@ -172,6 +175,25 @@ def clear_all_conversations(current_user):
     ConversationModel.save_to_files()
     return jsonify({'success': True, 'message': '所有对话已清除'})
 
+@chat_bp.route('/conversations/<conversation_id>/abort', methods=['POST'])
+@token_required
+def abort_message_generation(current_user, conversation_id):
+    """中断正在进行的消息生成"""
+    # 检查对话是否属于当前用户
+    is_owner = mysql_service.execute_query(
+        "SELECT 1 FROM user_conversations WHERE user_id = %s AND conversation_id = %s",
+        (current_user['id'], conversation_id)
+    )
+    
+    if not is_owner:
+        return jsonify({'error': '无权限中断此对话的消息生成'}), 403
+    
+    # 标记该对话的生成任务为已中断
+    generation_key = f"{current_user['id']}:{conversation_id}"
+    active_generations[generation_key] = False
+    
+    return jsonify({'success': True, 'message': '已发送中断信号'})
+
 @chat_bp.route('/conversations/<conversation_id>/messages', methods=['POST'])
 @token_required
 def send_message(current_user, conversation_id):
@@ -236,6 +258,10 @@ def send_message(current_user, conversation_id):
     
     # 使用流式模式获取LLM响应
     try:
+        # 在全局字典中标记该生成任务为活跃
+        generation_key = f"{current_user['id']}:{conversation_id}"
+        active_generations[generation_key] = True
+        
         if is_knowledge_graph_query:
             # 处理知识图谱查询，提取不带提示词的原始查询
             original_query = message_content.replace("使用知识图谱查询", "").strip()
@@ -251,6 +277,15 @@ def send_message(current_user, conversation_id):
                 full_response = progress_update
                 yield f"data: {json.dumps({'content': progress_update, 'full_response': full_response})}\n\n"
                 
+                # 检查是否已中断
+                if not active_generations.get(generation_key, True):
+                    full_response = "生成已被用户中断"
+                    system_message['content'] = full_response
+                    ConversationModel.save_to_files()
+                    yield f"data: {json.dumps({'content': '已中断', 'full_response': full_response, 'aborted': True})}\n\n"
+                    yield f"data: {json.dumps({'done': True, 'message_id': system_message_id, 'userMessageId': user_message_id, 'full_response': full_response, 'aborted': True})}\n\n"
+                    return
+                
                 # 生成Cypher查询
                 cypher_query = generate_cypher(original_query)
                 
@@ -258,6 +293,15 @@ def send_message(current_user, conversation_id):
                 progress_update = "查询语句已生成，正在执行查询..."
                 full_response = progress_update
                 yield f"data: {json.dumps({'content': progress_update, 'full_response': full_response})}\n\n"
+                
+                # 检查是否已中断
+                if not active_generations.get(generation_key, True):
+                    full_response = "生成已被用户中断"
+                    system_message['content'] = full_response
+                    ConversationModel.save_to_files()
+                    yield f"data: {json.dumps({'content': '已中断', 'full_response': full_response, 'aborted': True})}\n\n"
+                    yield f"data: {json.dumps({'done': True, 'message_id': system_message_id, 'userMessageId': user_message_id, 'full_response': full_response, 'aborted': True})}\n\n"
+                    return
                 
                 # 执行Neo4j查询
                 query_result = neo4j_service.run_query(cypher_query)
@@ -267,6 +311,15 @@ def send_message(current_user, conversation_id):
                 full_response = progress_update
                 yield f"data: {json.dumps({'content': progress_update, 'full_response': full_response})}\n\n"
                 
+                # 检查是否已中断
+                if not active_generations.get(generation_key, True):
+                    full_response = "生成已被用户中断"
+                    system_message['content'] = full_response
+                    ConversationModel.save_to_files()
+                    yield f"data: {json.dumps({'content': '已中断', 'full_response': full_response, 'aborted': True})}\n\n"
+                    yield f"data: {json.dumps({'done': True, 'message_id': system_message_id, 'userMessageId': user_message_id, 'full_response': full_response, 'aborted': True})}\n\n"
+                    return
+                
                 # 使用流式响应生成自然语言解释
                 nl_response = generate_natural_language_response(query_result, original_query, stream=True)
                 
@@ -275,6 +328,15 @@ def send_message(current_user, conversation_id):
                 
                 # 处理流式响应
                 for chunk in nl_response:
+                    # 检查是否已中断
+                    if not active_generations.get(generation_key, True):
+                        full_response = f"{accumulated_content}\n\n---\n*生成已被用户中断*"
+                        system_message['content'] = full_response
+                        ConversationModel.save_to_files()
+                        yield f"data: {json.dumps({'content': '已中断', 'full_response': full_response, 'aborted': True})}\n\n"
+                        yield f"data: {json.dumps({'done': True, 'message_id': system_message_id, 'userMessageId': user_message_id, 'full_response': full_response, 'aborted': True})}\n\n"
+                        return
+                    
                     if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
                         content = chunk.choices[0].delta.content or ""
                         accumulated_content += content
@@ -286,6 +348,9 @@ def send_message(current_user, conversation_id):
                 
                 # 保存更新的对话
                 ConversationModel.save_to_files()
+                
+                # 从活跃生成任务中移除
+                active_generations.pop(generation_key, None)
                 
                 # 发送结束标记
                 yield f"data: {json.dumps({'done': True, 'message_id': system_message_id, 'userMessageId': user_message_id, 'full_response': full_response})}\n\n"
@@ -331,6 +396,15 @@ def send_message(current_user, conversation_id):
                 nonlocal full_response
                 
                 for chunk in response:
+                    # 检查是否已中断
+                    if not active_generations.get(generation_key, True):
+                        full_response += "\n\n*生成已被用户中断*"
+                        system_message['content'] = full_response
+                        ConversationModel.save_to_files()
+                        yield f"data: {json.dumps({'content': '已中断', 'full_response': full_response, 'aborted': True})}\n\n"
+                        yield f"data: {json.dumps({'done': True, 'message_id': system_message_id, 'userMessageId': user_message_id, 'full_response': full_response, 'aborted': True})}\n\n"
+                        return
+                    
                     if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
                         content = chunk.choices[0].delta.content or ""
                         full_response += content
@@ -341,6 +415,9 @@ def send_message(current_user, conversation_id):
                 
                 # 保存更新的对话
                 ConversationModel.save_to_files()
+                
+                # 从活跃生成任务中移除
+                active_generations.pop(generation_key, None)
                 
                 # 发送结束标记
                 yield f"data: {json.dumps({'done': True, 'message_id': system_message_id, 'userMessageId': user_message_id, 'full_response': full_response})}\n\n"
@@ -372,6 +449,10 @@ def send_message(current_user, conversation_id):
             return Response(generate_stream(), mimetype='text/event-stream')
     
     except Exception as e:
+        # 从活跃生成任务中移除
+        generation_key = f"{current_user['id']}:{conversation_id}"
+        active_generations.pop(generation_key, None)
+        
         print(f"处理消息时出错: {str(e)}")
         return jsonify({'error': f'处理消息时出错: {str(e)}'}), 500
 
