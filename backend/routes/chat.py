@@ -213,9 +213,16 @@ def send_message(current_user, conversation_id):
     
     data = request.json
     message_content = data.get('content', '')
+    is_regenerate = data.get('regenerate', False)
+    from_message_index = data.get('fromMessageIndex', -1)
     
     if not message_content:
         return jsonify({'error': '消息内容不能为空'}), 400
+    
+    # 如果是重新生成请求，移除指定位置后的所有消息
+    if is_regenerate and from_message_index >= 0 and from_message_index < len(conversation['messages']):
+        # 仅保留到用户消息位置的消息
+        conversation['messages'] = conversation['messages'][:from_message_index + 1]
     
     # 创建用户消息
     user_message_id = str(uuid.uuid4())
@@ -236,7 +243,9 @@ def send_message(current_user, conversation_id):
     }
     
     # 添加消息到对话
-    conversation['messages'].append(user_message)
+    # 如果是重新生成，跳过添加用户消息（因为已经存在）
+    if not is_regenerate:
+        conversation['messages'].append(user_message)
     conversation['messages'].append(system_message)
     
     # 更新对话的时间戳为当前时间，确保活跃的对话显示在最前面

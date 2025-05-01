@@ -527,6 +527,252 @@ function App() {
     }
   };
 
+  // 添加重新生成消息功能的处理函数
+  const handleRegenerateMessage = async (messageId: string) => {
+    if (!activeConversation || isLoading) return;
+    
+    // 获取当前会话
+    const conversation = conversations.find(conv => conv.id === activeConversation);
+    if (!conversation) return;
+    
+    // 找到要重新生成的系统消息
+    const messageIndex = conversation.messages.findIndex(msg => msg.id === messageId);
+    if (messageIndex === -1 || conversation.messages[messageIndex].sender !== 'system') return;
+    
+    // 找到该系统消息前最近的用户消息
+    let userMessageIndex = -1;
+    for (let i = messageIndex - 1; i >= 0; i--) {
+      if (conversation.messages[i].sender === 'user') {
+        userMessageIndex = i;
+        break;
+      }
+    }
+    
+    if (userMessageIndex === -1) return;
+    
+    // 获取用户消息内容
+    const userMessage = conversation.messages[userMessageIndex];
+    
+    // 移除此系统消息之后的所有消息（包括此系统消息）
+    const updatedMessages = conversation.messages.slice(0, messageIndex);
+    
+    // 更新对话显示，在UI上立即移除这些消息
+    setConversations(prev => prev.map(conv => {
+      if (conv.id === activeConversation) {
+        return {
+          ...conv,
+          messages: updatedMessages
+        };
+      }
+      return conv;
+    }));
+    
+    // 设置加载状态
+    setIsLoading(true);
+    
+    try {
+      // 创建一个临时的系统消息，用于显示流式响应
+      const tempSystemMessage: Message = {
+        id: 'temp-system-' + Date.now().toString(),
+        content: '',
+        sender: 'system' as 'system',
+        timestamp: new Date(),
+      };
+      
+      // 添加临时系统消息到UI
+      setConversations(prev => prev.map(conv => {
+        if (conv.id === activeConversation) {
+          return {
+            ...conv,
+            messages: [...updatedMessages, tempSystemMessage],
+          };
+        }
+        return conv;
+      }));
+      
+      // 创建一个新的AbortController
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const { signal } = controller;
+      
+      // 发送POST请求并处理流式响应
+      fetch(`${API_BASE_URL}/conversations/${activeConversation}/messages`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ 
+          content: userMessage.content,
+          regenerate: true, // 标记这是重新生成请求
+          fromMessageIndex: userMessageIndex // 告诉后端从哪条消息开始重新生成
+        }),
+        signal,
+      }).then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        
+        function readStream() {
+          reader.read().then(({ value, done }) => {
+            if (done) {
+              setIsLoading(false);
+              return;
+            }
+            
+            const text = decoder.decode(value);
+            const lines = text.split('\n\n');
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  // 使用外部的handleStreamData函数处理数据
+                  if (data.content || data.full_response) {
+                    // 更新临时系统消息的内容
+                    setConversations((prev: Conversation[]) => prev.map((conv: Conversation) => {
+                      if (conv.id === activeConversation) {
+                        const updatedMessages = conv.messages.map((msg: Message) => {
+                          if (msg.id === tempSystemMessage.id) {
+                            return {
+                              ...msg,
+                              content: data.full_response || data.content || msg.content,
+                              sender: msg.sender, // 保持原有的sender类型
+                            } as Message;
+                          }
+                          return msg;
+                        });
+                        
+                        return {
+                          ...conv,
+                          messages: updatedMessages,
+                        };
+                      }
+                      return conv;
+                    }));
+                  } else if (data.done) {
+                    // 流式传输完成
+                    setIsLoading(false);
+                    
+                    // 重置中断控制器
+                    abortControllerRef.current = null;
+                    
+                    // 替换临时系统消息为最终版本
+                    setConversations((prev: Conversation[]) => {
+                      // 先找到当前会话
+                      const currentConv = prev.find((conv: Conversation) => conv.id === activeConversation);
+                      if (!currentConv) return prev;
+                      
+                      // 更新当前会话
+                      const updatedConv = {
+                        ...currentConv,
+                        timestamp: new Date(), // 更新时间戳
+                        messages: currentConv.messages
+                          .filter((msg: Message) => msg.id !== tempSystemMessage.id)
+                          .concat([
+                            {
+                              id: data.message_id,
+                              content: data.full_response,
+                              sender: 'system' as 'system',
+                              timestamp: new Date(),
+                            }
+                          ])
+                      };
+                      
+                      // 从列表中移除旧版本会话
+                      const otherConvs = prev.filter((conv: Conversation) => conv.id !== activeConversation);
+                      
+                      // 按时间戳排序
+                      return [updatedConv, ...otherConvs].sort((a: Conversation, b: Conversation) => b.timestamp.getTime() - a.timestamp.getTime());
+                    });
+                  } else if (data.title_updated) {
+                    // 处理标题更新
+                    setConversations((prev: Conversation[]) => prev.map((conv: Conversation) => {
+                      if (conv.id === data.conversation_id) {
+                        return {
+                          ...conv,
+                          title: data.new_title,
+                          timestamp: new Date() // 更新时间戳
+                        };
+                      }
+                      return conv;
+                    }).sort((a: Conversation, b: Conversation) => b.timestamp.getTime() - a.timestamp.getTime())); // 重新排序
+                  }
+                } catch (e) {
+                  console.error('Error parsing SSE data:', e);
+                }
+              }
+            }
+            
+            readStream();
+          }).catch(err => {
+            console.error('Stream reading error:', err);
+            setIsLoading(false);
+            
+            // 区分用户主动中断和真正的错误
+            if (isUserAbortingRef.current) {
+              // 用户主动中断，保留已生成的内容
+              setConversations(prev => prev.map(conv => {
+                if (conv.id === activeConversation) {
+                  const updatedMessages = conv.messages.map(msg => {
+                    if (msg.id === tempSystemMessage.id) {
+                      return {
+                        ...msg,
+                        content: msg.content + '\n\n*生成已被用户中断*',
+                        sender: msg.sender,
+                      } as Message;
+                    }
+                    return msg;
+                  });
+                  
+                  return {
+                    ...conv,
+                    messages: updatedMessages,
+                  };
+                }
+                return conv;
+              }));
+              
+              // 重置中断标志
+              isUserAbortingRef.current = false;
+            } else {
+              // 真正的错误
+              setConversations(prev => prev.map(conv => {
+                if (conv.id === activeConversation) {
+                  const updatedMessages = conv.messages.map(msg => {
+                    if (msg.id === tempSystemMessage.id) {
+                      return {
+                        ...msg,
+                        content: '抱歉，发生了错误，请重试。',
+                        sender: msg.sender,
+                      } as Message;
+                    }
+                    return msg;
+                  });
+                  
+                  return {
+                    ...conv,
+                    messages: updatedMessages,
+                  };
+                }
+                return conv;
+              }));
+            }
+          });
+        }
+        
+        readStream();
+      }).catch(error => {
+        console.error('Fetch error:', error);
+        setIsLoading(false);
+      });
+    
+    } catch (error) {
+      console.error('Error regenerating message:', error);
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className={`flex h-screen bg-gray-50 ${isDarkMode ? 'dark' : ''}`}>
       {/* 侧边栏 - 增强颜色区分和视觉层次 */}
@@ -602,7 +848,11 @@ function App() {
               <div className="py-2">
                 <div className="space-y-4">
                   {conversations.find(c => c.id === activeConversation)?.messages.map((message, index) => (
-                    <MessageBubble key={message.id || index} message={message} />
+                    <MessageBubble 
+                      key={message.id || index} 
+                      message={message} 
+                      onRegenerate={message.sender === 'system' ? handleRegenerateMessage : undefined}
+                    />
                   ))}
                 </div>
             </div>

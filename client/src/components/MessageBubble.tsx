@@ -3,12 +3,14 @@ import type { Message } from '../types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import { RefreshCw } from 'lucide-react';
 
 interface MessageBubbleProps {
   message: Message;
+  onRegenerate?: (messageId: string) => void;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, onRegenerate }: MessageBubbleProps) {
   const isUser = message.sender === 'user';
   
   // 检查是否为知识图谱查询进度消息
@@ -32,6 +34,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     );
   };
   
+  const handleRegenerate = () => {
+    if (onRegenerate) {
+      onRegenerate(message.id);
+    }
+  };
+  
   return (
     <div className="mb-4 max-w-3xl mx-auto">
       {isUser ? (
@@ -43,7 +51,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         </div>
       ) : (
         // 系统消息 - 无气泡，左对齐
-        <div className="flex justify-start">
+        <div className="flex flex-col justify-start">
           <div className="text-gray-800 dark:text-gray-200 max-w-[85%]">
             {isKGQueryProgress ? (
               renderProgressMessage()
@@ -95,6 +103,20 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               </ReactMarkdown>
             )}
           </div>
+          
+          {/* 重新生成按钮 - 仅对系统消息显示 */}
+          {!isKGQueryProgress && onRegenerate && (
+            <div className="flex mt-1 ml-1">
+              <button 
+                onClick={handleRegenerate}
+                className="flex items-center text-xs text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
+                title="重新生成回答"
+              >
+                <RefreshCw size={14} className="mr-1" />
+                <span>重新生成</span>
+              </button>
+            </div>
+          )}
         </div> 
       )}
     </div>

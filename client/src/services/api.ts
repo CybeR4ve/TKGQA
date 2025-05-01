@@ -215,4 +215,26 @@ export const validateToken = async (token: string) => {
     console.error('验证令牌时出错:', error);
     throw error;
   }
+};
+
+// 重新生成消息
+export const regenerateMessage = async (conversationId: string, content: string) => {
+  try {
+    const response = await fetchWithAuth(CONFIG.api.messages(conversationId), {
+      method: 'POST',
+      body: JSON.stringify({ 
+        content,
+        regenerate: true
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`重新生成消息失败: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('重新生成消息时出错:', error);
+    throw error;
+  }
 }; 
