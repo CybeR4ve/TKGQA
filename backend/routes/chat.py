@@ -20,13 +20,7 @@ chat_bp = Blueprint('chat', __name__)
 # 判断查询是否为知识图谱查询的正则模式
 KG_QUERY_PATTERNS = [
     r'.*图谱.*',
-    r'.*谁是.*',
-    r'.*什么时候.*',
-    r'.*在哪里.*',
-    r'.*之间的关系.*',
-    r'.*如何影响.*',
-    r'.*属于.*',
-    r'.*发生了什么.*',
+    r'.*查询.*',
 ]
 
 def is_kg_query(query):
@@ -223,6 +217,9 @@ def send_message(current_user, conversation_id):
     if is_regenerate and from_message_index >= 0 and from_message_index < len(conversation['messages']):
         # 仅保留到用户消息位置的消息
         conversation['messages'] = conversation['messages'][:from_message_index + 1]
+        # 如果提供了新内容，则更新用户消息内容
+        if from_message_index >= 0 and conversation['messages'][from_message_index]['sender'] == 'user':
+            conversation['messages'][from_message_index]['content'] = message_content
     
     # 创建用户消息
     user_message_id = str(uuid.uuid4())
@@ -396,7 +393,12 @@ def send_message(current_user, conversation_id):
             conversation_history = conversation['messages'][:-1]
             
             # 获取流式响应
-            response = get_llm_response(message_content, conversation_history)
+            # regenerate情况下，message_content已经被写入到了conversation_history的最后一条消息中
+            # 所以不需要再传入message_content，否则会导致消息重复
+            response = get_llm_response(
+                "" if is_regenerate else message_content, 
+                conversation_history
+            )
             
             # 初始化完整响应变量
             full_response = ""

@@ -1,17 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { Message } from '../types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Copy, Check, Edit2, X, Send } from 'lucide-react';
 
 interface MessageBubbleProps {
   message: Message;
   onRegenerate?: (messageId: string) => void;
+  onEditMessage?: (messageId: string, newContent: string) => void;
 }
 
-export function MessageBubble({ message, onRegenerate }: MessageBubbleProps) {
+export function MessageBubble({ message, onRegenerate, onEditMessage }: MessageBubbleProps) {
   const isUser = message.sender === 'user';
+  const [isCopied, setIsCopied] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(message.content);
   
   // 检查是否为知识图谱查询进度消息
   const isKGQueryProgress = 
@@ -40,14 +44,87 @@ export function MessageBubble({ message, onRegenerate }: MessageBubbleProps) {
     }
   };
   
+  const handleCopyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setIsCopied(true);
+      
+      // 2秒后重置复制状态
+      setTimeout(() => {
+        setIsCopied(false);
+      }, 2000);
+    } catch (error) {
+      console.error('复制到剪贴板失败:', error);
+    }
+  };
+  
+  const handleStartEdit = () => {
+    setIsEditing(true);
+    setEditContent(message.content);
+  };
+  
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+  };
+  
+  const handleConfirmEdit = () => {
+    if (onEditMessage && editContent.trim() !== '') {
+      onEditMessage(message.id, editContent);
+      setIsEditing(false);
+    }
+  };
+  
   return (
     <div className="mb-4 max-w-3xl mx-auto">
       {isUser ? (
         // 用户消息 - 使用气泡和右对齐
-        <div className="flex justify-end">
-          <div className="bg-blue-600 text-white dark:bg-blue-700 rounded-2xl rounded-tr-sm px-4 py-2 max-w-[85%] shadow-sm">
-            <p className="break-words">{message.content}</p>
-          </div>
+        <div className="flex flex-col items-end">
+          {isEditing ? (
+            // 编辑模式
+            <div className="bg-blue-50 dark:bg-gray-800 rounded-xl p-3 max-w-[85%] w-full border border-blue-200 dark:border-gray-700">
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="w-full p-2 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px] resize-none"
+                placeholder="编辑你的消息..."
+              />
+              <div className="flex justify-end mt-2 space-x-2">
+                <button
+                  onClick={handleCancelEdit}
+                  className="flex items-center px-3 py-1 text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                >
+                  <X size={16} className="mr-1" />
+                  <span>取消</span>
+                </button>
+                <button
+                  onClick={handleConfirmEdit}
+                  className="flex items-center px-3 py-1 text-xs text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 rounded transition-colors"
+                >
+                  <Send size={16} className="mr-1" />
+                  <span>确定</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            // 显示模式
+            <div className="bg-blue-600 text-white dark:bg-blue-700 rounded-2xl rounded-tr-sm px-4 py-2 max-w-[85%] shadow-sm">
+              <p className="break-words">{message.content}</p>
+            </div>
+          )}
+          
+          {/* 用户消息的操作按钮 */}
+          {!isEditing && onEditMessage && (
+            <div className="mt-1 mr-1">
+              <button
+                onClick={handleStartEdit}
+                className="flex items-center text-xs text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
+                title="编辑消息"
+              >
+                <Edit2 size={14} className="mr-1" />
+                <span>编辑</span>
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         // 系统消息 - 无气泡，左对齐
@@ -104,16 +181,38 @@ export function MessageBubble({ message, onRegenerate }: MessageBubbleProps) {
             )}
           </div>
           
-          {/* 重新生成按钮 - 仅对系统消息显示 */}
-          {!isKGQueryProgress && onRegenerate && (
-            <div className="flex mt-1 ml-1">
-              <button 
-                onClick={handleRegenerate}
+          {/* 操作按钮 - 仅对系统消息显示 */}
+          {!isKGQueryProgress && (
+            <div className="flex mt-1 ml-1 space-x-4">
+              {/* 重新生成按钮 */}
+              {onRegenerate && (
+                <button 
+                  onClick={handleRegenerate}
+                  className="flex items-center text-xs text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
+                  title="重新生成回答"
+                >
+                  <RefreshCw size={14} className="mr-1" />
+                  <span>重新生成</span>
+                </button>
+              )}
+              
+              {/* 复制按钮 */}
+              <button
+                onClick={handleCopyToClipboard}
                 className="flex items-center text-xs text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
-                title="重新生成回答"
+                title="复制到剪贴板"
               >
-                <RefreshCw size={14} className="mr-1" />
-                <span>重新生成</span>
+                {isCopied ? (
+                  <>
+                    <Check size={14} className="mr-1 text-green-500" />
+                    <span className="text-green-500">已复制</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={14} className="mr-1" />
+                    <span>复制</span>
+                  </>
+                )}
               </button>
             </div>
           )}
