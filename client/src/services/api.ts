@@ -100,6 +100,43 @@ export const sendMessage = async (conversationId: string, content: string) => {
   }
 };
 
+// 更新对话标题
+export const updateConversationTitle = async (conversationId: string, title: string) => {
+  try {
+    const response = await fetchWithAuth(`${CONFIG.api.conversations}/${conversationId}/title`, {
+      method: 'PUT',
+      body: JSON.stringify({ title })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`更新标题失败: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('更新标题时出错:', error);
+    throw error;
+  }
+};
+
+// 请求生成对话标题
+export const generateConversationTitle = async (conversationId: string) => {
+  try {
+    const response = await fetchWithAuth(`${CONFIG.api.conversations}/${conversationId}/generate-title`, {
+      method: 'POST'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`生成标题失败: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('生成标题时出错:', error);
+    throw error;
+  }
+};
+
 // 删除会话
 export const deleteConversation = async (conversationId: string) => {
   try {

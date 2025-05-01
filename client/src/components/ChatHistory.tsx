@@ -1,21 +1,27 @@
 import React, { useState } from 'react';
-import { Search, X, Trash2, Calendar } from 'lucide-react';
+import { Search, X, Trash2, Calendar, Edit, Check } from 'lucide-react';
 import type { Conversation } from '../types';
+import * as api from '../services/api';
 
 interface ChatHistoryProps {
   conversations: Conversation[];
   activeConversation: string;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onRefreshConversations?: () => void;
 }
 
 export function ChatHistory({ 
   conversations, 
   activeConversation, 
   onSelect,
-  onDelete 
+  onDelete,
+  onRefreshConversations
 }: ChatHistoryProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [editingTitle, setEditingTitle] = useState<string | null>(null);
+  const [newTitle, setNewTitle] = useState('');
+  const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
 
   const filteredConversations = conversations.filter(conversation => 
     conversation.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -23,6 +29,32 @@ export function ChatHistory({
       message.content.toLowerCase().includes(searchQuery.toLowerCase())
     )
   );
+
+  // 开始编辑标题
+  const handleStartEditTitle = (conversationId: string, currentTitle: string) => {
+    setEditingTitle(conversationId);
+    setNewTitle(currentTitle);
+  };
+
+  // 保存编辑后的标题
+  const handleSaveTitle = async (conversationId: string) => {
+    try {
+      setIsUpdatingTitle(true);
+      await api.updateConversationTitle(conversationId, newTitle);
+      
+      // 刷新会话列表
+      if (onRefreshConversations) {
+        onRefreshConversations();
+      }
+      
+      // 取消编辑状态
+      setEditingTitle(null);
+    } catch (error) {
+      console.error('更新标题出错:', error);
+    } finally {
+      setIsUpdatingTitle(false);
+    }
+  };
 
   // 提取最新消息和时间的辅助函数
   const getLatestMessage = (conv: Conversation) => {
@@ -95,6 +127,7 @@ export function ChatHistory({
             const messagePreview = hasMessages 
               ? (conversation.messages[conversation.messages.length - 1]?.content || '').substring(0, 60) 
               : '暂无消息';
+            const isEditing = editingTitle === conversation.id;
             
             return (
             <div
@@ -105,12 +138,32 @@ export function ChatHistory({
                     : 'hover:bg-white dark:hover:bg-gray-800 border-l-4 border-transparent'
               }`}
             >
-              <button
-                onClick={() => onSelect(conversation.id)}
-                  className="w-full p-3 text-left transition-colors pr-12"
-              >
-                  <div className="flex items-start">
-                    <div className="flex-1 min-w-0">
+              <div className="p-3">
+                {isEditing ? (
+                  <div className="flex items-center mb-1">
+                    <input
+                      type="text"
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      className="flex-1 text-sm rounded border border-blue-300 dark:border-blue-600 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      placeholder="输入标题..."
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => handleSaveTitle(conversation.id)}
+                      disabled={isUpdatingTitle}
+                      className="p-1 ml-1 rounded-full text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      title="保存标题"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between mb-1">
+                    <button
+                      onClick={() => onSelect(conversation.id)}
+                      className="flex-1 text-left"
+                    >
                       <h3 className={`font-medium truncate text-sm ${
                         activeConversation === conversation.id
                           ? 'text-blue-700 dark:text-blue-400'
@@ -118,26 +171,46 @@ export function ChatHistory({
                       }`}>
                         {conversation.title}
                       </h3>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-1 break-all">
-                        {messagePreview}
-              </p>
-                      <div className="flex items-center mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                        <Calendar className="h-3 w-3 mr-1" />
-                        {formatDate(conversation.timestamp)}
-                      </div>
+                    </button>
+                    <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEditTitle(conversation.id, conversation.title);
+                        }}
+                        className="p-1 rounded-full text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                        title="编辑标题"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(conversation.id);
+                        }}
+                        className="p-1 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        title="删除对话"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
+                  </div>
+                )}
+                
+                <button
+                  onClick={() => !isEditing && onSelect(conversation.id)}
+                  className={`w-full text-left ${isEditing ? 'pointer-events-none' : ''}`}
+                  disabled={isEditing}
+                >
+                  <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1 break-all">
+                    {messagePreview}
+                  </p>
+                  <div className="flex items-center mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    {formatDate(conversation.timestamp)}
+                  </div>
+                </button>
               </div>
-            </button>
-              <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(conversation.id);
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                title="删除对话"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
             </div>
             );
           })}

@@ -110,12 +110,13 @@ def generate_cypher(natural_language_query):
     **要求:**
     - 严格遵守上述图谱模式中列出的节点标签、属性名称、关系类型和时间格式。
     - 只输出 Cypher 查询语句，不要包含任何解释性文字、前缀或额外的符号。
+    - 查询语句务必要包含originalText，不要省略。
 
     查询示例：
     问题： 2025年4月，英伟达发生了哪些事件？
     查询语句：MATCH (c:Entity {name: '英伟达'})<-[r]-(e:Event)
 WHERE e.timestampStr >= '2025-04-01 00:00:00' AND e.timestampStr <= '2025-04-30 23:59:59'
-RETURN e.eventType, e.timestampStr, type(r)
+RETURN e.eventType, e.timestampStr, e.triggerText, e.originalText
         """
         
         messages = [
@@ -171,11 +172,11 @@ def generate_natural_language_response(query_result, original_query, stream=Fals
         print(f"是否使用流式响应: {stream}")
         
         # 系统提示词，指导LLM如何将查询结果转换为自然语言
-        system_prompt = """你是一个知识图谱查询解释专家。你的任务是将Neo4j查询结果转换为流畅、自然的语言解释。
+        system_prompt = """你是一个知识图谱查询解释专家。你的任务是将Neo4j查询结果转换为流畅、自然的语言解释，再根据用户提出的原始问题，将查询结果与你的知识结合，给出最终的回答。
 
         遵循以下要求:
-        1. 回答应直接、明确地解答用户的原始问题
-        2. 如果结果为空，请友好地指出没有找到相关信息
+        1. 回答应直接、明确地解答用户的原始问题，同时要将查询结果与你的知识结合，对查询得到的结果作出适当的补充与扩展。
+        2. 如果结果为空，请友好地指出没有找到相关信息，但可以结合你的知识，给出可能的回答
         3. 不要提及技术细节如"查询"、"Neo4j"或"Cypher"
         4. 对于时间相关的查询，确保清晰地表达时间关系
         5. 对于复杂的结果，进行适当的总结和概括 
@@ -224,3 +225,66 @@ def generate_natural_language_response(query_result, original_query, stream=Fals
     except Exception as e:
         print(f"生成自然语言响应时出错: {str(e)}")
         raise Exception(f"生成自然语言响应时出错: {str(e)}")
+
+def generate_title_for_conversation(user_message, system_response):
+    """
+    根据最近的对话生成一个简洁的标题
+    
+    Args:
+        user_message (str): 用户的消息内容
+        system_response (str): 系统的响应内容
+        
+    Returns:
+        str: 生成的对话标题
+    """
+    try:
+        print(f"开始为对话生成标题")
+        
+        # 系统提示词，指导LLM如何生成标题
+        system_prompt = """你是一个专业的对话标题生成助手。请根据给定的对话内容，生成一个简洁明了的标题。
+        
+        要求:
+        1. 标题应简短精炼，不超过10个汉字
+        2. 标题应能准确反映对话的主要内容或主题
+        3. 标题应具有描述性，避免过于笼统的词语
+        4. 不要使用引号或其他特殊符号
+        5. 只输出标题文本，不要包含任何解释、前缀或额外符号
+        """
+        
+        # 将对话内容截断，只保留前200个字符，避免内容过长
+        truncated_user_message = user_message[:200] + ("..." if len(user_message) > 200 else "")
+        truncated_system_response = system_response[:200] + ("..." if len(system_response) > 200 else "")
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"对话内容:\n用户: {truncated_user_message}\n系统: {truncated_system_response}\n\n请根据以上对话生成一个简短的标题。"}
+        ]
+        
+        # 调用LLM API生成标题
+        if USE_OPENAI:
+            print("使用OpenAI API生成对话标题")
+            response = openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=messages,
+                temperature=0.5,
+                max_tokens=20,
+            )
+        else:
+            print("使用DeepSeek API生成对话标题")
+            deepseek_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+            response = deepseek_client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=messages,
+                temperature=0.5,
+                max_tokens=20,
+            )
+        
+        # 提取生成的标题
+        title = response.choices[0].message.content.strip()
+        print(f"生成的对话标题: '{title}'")
+        return title
+        
+    except Exception as e:
+        print(f"生成对话标题时出错: {str(e)}")
+        # 如果生成标题失败，返回一个默认标题
+        return "新对话"

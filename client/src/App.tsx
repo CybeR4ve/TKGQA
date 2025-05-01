@@ -74,8 +74,14 @@ function App() {
           }))
         }));
         
+        // 按时间戳倒序排序，确保最新的对话显示在最前面
+        formattedData.sort((a: Conversation, b: Conversation) => b.timestamp.getTime() - a.timestamp.getTime());
+        
+        // 保持当前选中的会话
+        const currentActiveConv = activeConversation;
+        
         setConversations(formattedData);
-        if (formattedData.length > 0 && !activeConversation) {
+        if (formattedData.length > 0 && !currentActiveConv) {
           setActiveConversation(formattedData[0].id);
       }
     } catch (error) {
@@ -91,11 +97,15 @@ function App() {
       const title = `新对话 ${conversations.length + 1}`;
       const newConversation = await api.createConversation(title);
       
-        // Convert ISO date string to Date object
-        newConversation.timestamp = new Date(newConversation.timestamp);
-        
-        setConversations(prev => [newConversation, ...prev]);
-        setActiveConversation(newConversation.id);
+      // Convert ISO date string to Date object
+      newConversation.timestamp = new Date(newConversation.timestamp);
+      
+      // 确保新创建的对话始终在最顶部
+      setConversations((prev: Conversation[]) => {
+        // 添加新对话并按时间戳排序
+        return [newConversation, ...prev].sort((a: Conversation, b: Conversation) => b.timestamp.getTime() - a.timestamp.getTime());
+      });
+      setActiveConversation(newConversation.id);
     } catch (error) {
       console.error('Error creating new conversation:', error);
     } finally {
@@ -158,38 +168,54 @@ function App() {
           setIsLoading(false);
           
           // 替换临时用户消息和系统消息为最终版本
-          setConversations(prev => prev.map(conv => {
-            if (conv.id === activeConversation) {
-              // 找到并替换临时消息
-              const updatedMessages = conv.messages
-                .filter(msg => msg.id !== tempUserMessage.id && msg.id !== tempSystemMessage.id);
-              
-              // 添加最终的用户消息
-              const finalUserMessage: Message = {
-                ...tempUserMessage,
-                id: data.userMessageId || tempUserMessage.id,
-              };
-              
-              // 添加最终的系统消息
-              const finalSystemMessage: Message = {
-                id: data.message_id,
-                content: data.full_response,
-                sender: 'system' as 'system', // 显式指定类型
-                timestamp: new Date(),
-              };
-              
+          setConversations((prev: Conversation[]) => {
+            // 先找到当前会话
+            const currentConv = prev.find((conv: Conversation) => conv.id === activeConversation);
+            if (!currentConv) return prev;
+            
+            // 更新当前会话
+            const updatedConv = {
+              ...currentConv,
+              timestamp: new Date(), // 更新时间戳
+              messages: currentConv.messages
+                .filter((msg: Message) => msg.id !== tempUserMessage.id && msg.id !== tempSystemMessage.id)
+                .concat([
+                  {
+                    ...tempUserMessage,
+                    id: data.userMessageId || tempUserMessage.id,
+                  },
+                  {
+                    id: data.message_id,
+                    content: data.full_response,
+                    sender: 'system' as 'system',
+                    timestamp: new Date(),
+                  }
+                ])
+            };
+            
+            // 从列表中移除旧版本会话
+            const otherConvs = prev.filter((conv: Conversation) => conv.id !== activeConversation);
+            
+            // 按时间戳排序
+            return [updatedConv, ...otherConvs].sort((a: Conversation, b: Conversation) => b.timestamp.getTime() - a.timestamp.getTime());
+          });
+        } else if (data.title_updated) {
+          // 处理标题更新
+          setConversations((prev: Conversation[]) => prev.map((conv: Conversation) => {
+            if (conv.id === data.conversation_id) {
               return {
                 ...conv,
-                messages: [...updatedMessages, finalUserMessage, finalSystemMessage],
+                title: data.new_title,
+                timestamp: new Date() // 更新时间戳
               };
             }
             return conv;
-          }));
+          }).sort((a: Conversation, b: Conversation) => b.timestamp.getTime() - a.timestamp.getTime())); // 重新排序
         } else {
           // 更新临时系统消息的内容
-          setConversations(prev => prev.map(conv => {
+          setConversations((prev: Conversation[]) => prev.map((conv: Conversation) => {
             if (conv.id === activeConversation) {
-              const updatedMessages = conv.messages.map(msg => {
+              const updatedMessages = conv.messages.map((msg: Message) => {
                 if (msg.id === tempSystemMessage.id) {
                   return {
                     ...msg,
@@ -494,6 +520,7 @@ function App() {
             activeConversation={activeConversation}
             onSelect={setActiveConversation}
             onDelete={handleDeleteConversation}
+            onRefreshConversations={fetchConversations}
           />
           )}
         </div>
