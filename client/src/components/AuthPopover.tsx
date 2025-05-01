@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { LogIn, LogOut, UserPlus, X, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import type { User } from '../types';
+import { LoadingIndicator } from './LoadingIndicator';
 
 // 添加隐藏浏览器原生密码显示按钮的样式
 const hidePasswordRevealStyle = `
@@ -16,6 +17,7 @@ interface AuthPopoverProps {
   onRegister?: (email: string, password: string) => Promise<boolean>;
   onLogout?: () => void;
   user: User | null;
+  isLoading?: boolean;
 }
 
 export function AuthPopover({ 
@@ -23,7 +25,8 @@ export function AuthPopover({
   onLogin, 
   onRegister,
   onLogout,
-  user
+  user,
+  isLoading = false
 }: AuthPopoverProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -32,6 +35,9 @@ export function AuthPopover({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 合并组件内部和外部的加载状态
+  const isProcessing = isSubmitting || isLoading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,6 +103,7 @@ export function AuthPopover({
             onClick={onClose}
             className={`p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
             aria-label="关闭"
+            disabled={isProcessing}
           >
             <X className="h-4 w-4 text-gray-500 dark:text-gray-400" />
           </button>
@@ -121,9 +128,20 @@ export function AuthPopover({
             <button
               onClick={onLogout}
               className="w-full py-2.5 px-4 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white font-medium rounded-md transition-colors flex items-center justify-center mt-6"
+              disabled={isProcessing}
             >
+              {isProcessing ? (
+                <div className="flex space-x-1">
+                  <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              ) : (
+                <>
               <LogOut className="w-4 h-4 mr-2" />
               退出登录
+                </>
+              )}
             </button>
           </div>
         ) : (
@@ -131,6 +149,12 @@ export function AuthPopover({
           {error && (
             <div className="p-3 mb-3 text-sm text-red-500 bg-red-100 dark:bg-red-900/30 dark:text-red-300 rounded-md">
               {error}
+            </div>
+          )}
+          
+          {isProcessing && (
+            <div className="flex justify-center">
+              <LoadingIndicator />
             </div>
           )}
           
@@ -154,7 +178,7 @@ export function AuthPopover({
                   className="w-full py-2.5 pl-10 pr-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white"
                   placeholder="your@email.com"
                   required
-                  disabled={isSubmitting}
+                  disabled={isProcessing}
                 />
               </div>
             </div>
@@ -178,14 +202,14 @@ export function AuthPopover({
                   className="w-full py-2.5 pl-10 pr-10 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white"
                   placeholder="••••••••"
                   required
-                  disabled={isSubmitting}
+                  disabled={isProcessing}
                   autoComplete="new-password"
                 />
                 <button
                   type="button"
                   className="absolute inset-y-0 right-0 flex items-center pr-3"
                   onClick={() => setShowPassword(!showPassword)}
-                  disabled={isSubmitting}
+                  disabled={isProcessing}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4 text-gray-500 dark:text-gray-400" />
@@ -216,7 +240,7 @@ export function AuthPopover({
                     className="w-full py-2.5 pl-10 pr-10 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white"
                     placeholder="••••••••"
                     required
-                    disabled={isSubmitting}
+                    disabled={isProcessing}
                     autoComplete="new-password"
                   />
                 </div>
@@ -226,19 +250,39 @@ export function AuthPopover({
             <button
               type="submit"
               className={`w-full py-2.5 px-4 ${
-                isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-700'
+                isProcessing ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-700'
               } text-white font-medium rounded-md transition-colors flex items-center justify-center`}
-              disabled={isSubmitting}
+              disabled={isProcessing}
             >
               {mode === 'login' ? (
                 <>
+                  {isProcessing ? (
+                    <div className="flex space-x-1">
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  ) : (
+                <>
                   <LogIn className="w-4 h-4 mr-2" />
-                  {isSubmitting ? '登录中...' : '登录'}
+                      登录
+                    </>
+                  )}
                 </>
               ) : (
                 <>
+                  {isProcessing ? (
+                    <div className="flex space-x-1">
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+              ) : (
+                <>
                   <UserPlus className="w-4 h-4 mr-2" />
-                  {isSubmitting ? '注册中...' : '注册'}
+                      注册
+                    </>
+                  )}
                 </>
               )}
             </button>
@@ -249,7 +293,7 @@ export function AuthPopover({
                 type="button"
                 onClick={toggleMode}
                 className="text-sm text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
-                disabled={isSubmitting}
+                disabled={isProcessing}
               >
                 {mode === 'login' ? '没有账号？点击注册' : '已有账号？点击登录'}
               </button>

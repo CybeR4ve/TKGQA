@@ -1,6 +1,7 @@
 from neo4j import GraphDatabase
 import sys
 import os
+import json
 
 # 添加父目录到路径，以便导入配置
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -40,11 +41,28 @@ class Neo4jService:
             查询结果列表，每项为字典形式
         """
         try:
+            print(f"执行Cypher查询: {query}")
+            print(f"参数: {parameters or {}}")
+            
             with self.driver.session() as session:
                 result = session.run(query, parameters or {})
-                return [record.data() for record in result]
+                results = [record.data() for record in result]
+                
+                # 以易读的格式输出结果
+                print(f"查询结果 (共{len(results)}条记录):")
+                if results:
+                    # 最多打印前5条结果，避免日志过多
+                    for i, record in enumerate(results[:5]):
+                        print(f"  记录 {i+1}: {json.dumps(record, ensure_ascii=False)}")
+                    if len(results) > 5:
+                        print(f"  ... 还有 {len(results) - 5} 条记录 ...")
+                else:
+                    print("  查询结果为空")
+                
+                return results
         except Exception as e:
             print(f"执行Cypher查询时出错: {str(e)}")
+            print(f"查询语句: {query}")
             raise
     
     def test_connection(self):

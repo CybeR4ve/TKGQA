@@ -223,26 +223,48 @@ def send_message(current_user, conversation_id):
             # 知识图谱查询处理
             def generate():
                 # 发送处理中的状态
+                print(f"开始处理知识图谱查询: '{message_content}'")
                 yield f"data: {json.dumps({'content': '正在查询知识图谱...', 'full_response': '正在查询知识图谱...', 'message_id': system_message_id, 'userMessageId': user_message_id})}\n\n"
                 
                 try:
                     # 1. 生成Cypher查询
+                    print("步骤1: 生成Cypher查询")
                     cypher_query = generate_cypher(message_content)
+                    print(f"生成的Cypher查询: {cypher_query}")
                     # 发送Cypher生成完成的状态
                     progress_message = "正在查询知识图谱...\n查询语句已生成，正在执行..."
                     yield f"data: {json.dumps({'content': '查询语句已生成，正在执行...', 'full_response': progress_message, 'message_id': system_message_id, 'userMessageId': user_message_id})}\n\n"
                     
                     # 2. 执行Cypher查询
+                    print("步骤2: 执行Cypher查询")
                     query_result = neo4j_service.run_query(cypher_query)
+                    print(f"查询结果条数: {len(query_result)}")
                     # 发送查询完成的状态
                     progress_message = "正在查询知识图谱...\n查询语句已生成，正在执行...\n查询完成，生成回答中..."
                     yield f"data: {json.dumps({'content': '查询完成，生成回答中...', 'full_response': progress_message, 'message_id': system_message_id, 'userMessageId': user_message_id})}\n\n"
                     
-                    # 3. 生成自然语言响应
-                    response = generate_natural_language_response(query_result, message_content)
+                    # 3. 生成自然语言响应（使用流式响应）
+                    print("步骤3: 生成自然语言响应（流式）")
+                    stream_response = generate_natural_language_response(query_result, message_content, stream=True)
+                    
+                    full_response = ""
+                    response_content = ""
+                    
+                    # 流式处理回答内容
+                    for chunk in stream_response:
+                        if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+                            content = chunk.choices[0].delta.content or ""
+                            if content:
+                                response_content += content
+                                full_response = f"{response_content}\n---\n*通过知识图谱查询生成的回答*"
+                                # 发送部分内容到前端
+                                yield f"data: {json.dumps({'content': content, 'full_response': full_response, 'message_id': system_message_id, 'userMessageId': user_message_id})}\n\n"
+                    
+                    print(f"流式响应完成，总长度: {len(response_content)}")
+                    print("知识图谱查询处理完成")
                     
                     # 构建完整响应内容
-                    full_response = f"{response}\n\n---\n*通过知识图谱查询生成的回答*"
+                    full_response = f"{response_content}\n---\n*通过知识图谱查询生成的回答*"
                     
                     # 更新完整的消息内容
                     for conv in ConversationModel.conversations:
@@ -259,7 +281,8 @@ def send_message(current_user, conversation_id):
                 
                 except Exception as e:
                     error_message = f"知识图谱查询出错: {str(e)}"
-                    print(error_message)
+                    print(f"知识图谱查询处理出错: {str(e)}")
+                    print(f"错误详情: {e}")
                     
                     # 更新错误消息
                     for conv in ConversationModel.conversations:
@@ -275,33 +298,36 @@ def send_message(current_user, conversation_id):
                     yield f"data: {json.dumps({'content': error_message, 'full_response': error_message, 'done': True, 'message_id': system_message_id, 'userMessageId': user_message_id})}\n\n"
         else:
             # 常规LLM响应处理
-        # 获取流式响应
-            stream_response = get_llm_response(message_content, conversation['messages'][:-2])
-        
-        def generate():
-            full_response = ""
+            # 获取流式响应
+            # 注意：我们需要包含当前用户的最新消息，因此不应排除最后两条消息
+            # 而是将当前用户消息包含在历史中，只排除刚创建的空系统消息
+            conversation_history = conversation['messages'][:-1]  # 只排除最后一条空系统消息
+            stream_response = get_llm_response(message_content, conversation_history)
             
-            # 对于流式响应处理
-            for chunk in stream_response:
-                if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
-                    content = chunk.choices[0].delta.content or ""
-                    if content:
-                        full_response += content
-                        # 发送数据到前端
-                        yield f"data: {json.dumps({'content': content, 'full_response': full_response, 'message_id': system_message_id, 'userMessageId': user_message_id})}\n\n"
-            
-            # 更新完整的消息内容
-            for conv in ConversationModel.conversations:
-                if conv['id'] == conversation_id:
-                    for msg in conv['messages']:
-                        if msg['id'] == system_message_id:
-                            msg['content'] = full_response
-                            break
-            
-            ConversationModel.save_to_files()
-            
-            # 发送完成信号
-            yield f"data: {json.dumps({'done': True, 'message_id': system_message_id, 'userMessageId': user_message_id, 'full_response': full_response})}\n\n"
+            def generate():
+                full_response = ""
+                
+                # 对于流式响应处理
+                for chunk in stream_response:
+                    if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+                        content = chunk.choices[0].delta.content or ""
+                        if content:
+                            full_response += content
+                            # 发送数据到前端
+                            yield f"data: {json.dumps({'content': content, 'full_response': full_response, 'message_id': system_message_id, 'userMessageId': user_message_id})}\n\n"
+                
+                # 更新完整的消息内容
+                for conv in ConversationModel.conversations:
+                    if conv['id'] == conversation_id:
+                        for msg in conv['messages']:
+                            if msg['id'] == system_message_id:
+                                msg['content'] = full_response
+                                break
+                
+                ConversationModel.save_to_files()
+                
+                # 发送完成信号
+                yield f"data: {json.dumps({'done': True, 'message_id': system_message_id, 'userMessageId': user_message_id, 'full_response': full_response})}\n\n"
         
         # 设置流式响应的头部
         headers = {

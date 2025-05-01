@@ -38,12 +38,7 @@ def get_llm_response(prompt, conversation_history):
         system_prompt = """你是一个智能助手，擅长回答各类问题并提供详细解释。
         - 你应该保持友好、有礼貌的语气
         - 对于专业问题，提供深入详细的分析和解释
-        - 对于有争议的话题，展示不同观点并保持中立
-        - 当用户提问不清晰时，可以礼貌地请求澄清
-        - 如果你不确定某个事实，坦诚承认而不是提供错误信息
-        - 避免生成有害、不适当或违反道德的内容
-        - 你可以使用emoji来增加表达的生动性😊
-        - 列表和数字条目应该使用markdown格式
+        - 提醒用户可以使用"使用知识图谱查询..."触发查询
         """
         messages.append({"role": "system", "content": system_prompt})
         
@@ -93,21 +88,34 @@ def generate_cypher(natural_language_query):
         str: 生成的Cypher查询语句
     """
     try:
+        print(f"开始将自然语言转换为Cypher查询: '{natural_language_query}'")
+        
         # 系统提示词，指导LLM如何生成Cypher查询
-        system_prompt = """你是一个专业的知识图谱查询专家。你的任务是将用户的自然语言问题转换为准确的Cypher查询语句。
-        
-        知识图谱具有以下特性:
-        - 使用Neo4j存储的时序知识图谱
-        - 包含事件、人物、组织、地点、时间等实体
-        - 实体间的关系包括：参与、发生于、位于、隶属于等
-        - 时间属性通常存储为实体的属性，例如 timestamp, date 等
-        
-        请生成符合以下要求的Cypher查询:
-        1. 能够准确反映用户问题的语义
-        2. 适当使用Neo4j的时序查询能力
-        3. 考虑实体间的关系和属性
-        4. 仅返回Cypher查询语句，不包含任何解释或注释
-        5. 查询应该尽量简洁高效
+        system_prompt = """你是一个专业的知识图谱查询专家。你的任务是将用户的自然语言问题，严格按照提供的Neo4j图谱模式，根据给定的类型，识别属于哪个类型，生成对应的Cypher查询语句。
+
+- **节点:**
+  - **`:Entity`**: 实体节点，属性有 `entityId` (唯一ID), `name` (名称), `type` (类型，包括：'Date', 'Number', 'Text', '人物', '企业', '地点', '机构')。**注意：**查询时，不要使用Date，而是使用下方的`timestampStr`属性。
+  - **`:Event`**: 事件节点，属性有 `eventId` (唯一ID), `eventType` (事件类型"), `timestampStr` (时间戳字符串), `triggerText` (触发词), `originalText` (原文片段)。  **注意:** `timestampStr` 属性存储事件发生的时间，**精确格式为 `"YYYY-MM-DD HH:MM:SS"`**。这是一个字符串属性，可以直接进行字符串比较和排序。事件类型包括：'中标', '亏损', '企业上市', '企业收购', '企业融资', '公司上市', '股东减持', '股东分红', '股东增持', '股份回购'
+- **关系:**
+  - **实体间关系**: 连接两个 `:Entity` 节点。关系类型包括: '上市公司', '中标公司', '中标日期', '中标标的', '中标金额', '事件时间', '亏损变化', '交易完成时间', '交易股票/股份数量', '交易金额', '公司名称', '净亏损', '减持方', '减持部分占总股本比例', '分红时间', '分红股份数量', '回购完成时间', '回购方', '回购股份数量', '增持方', '投资方', '披露时间', '招标方', '收购方', '收购标的', '每股交易价格', '每股分配', '每股派发现金红利', '环节', '股票简称', '融资轮次', '融资金额', '被投资方', '被收购方', '财报周期'。
+    - 示例: `(:Entity)-[:中标日期]->(:Entity)`
+  -**事件-实体关系 (论元)**: 连接 `:Event` 节点和 `:Entity` 节点。关系类型对应事件论元角色。           
+    - 示例: `(:Event)-[:参与方]->(:Entity)` (关系可能带有属性，如 `argumentText`)
+  -**如何使用时间属性 (`timestampStr`) 进行查询:**
+    - 你可以使用 `timestampStr` 属性来过滤特定日期或时间范围内的事件，例如: `WHERE e.timestampStr >= '起始日期时间' AND e.timestampStr <= '结束日期时间'`
+    - 你可以使用 `timestampStr` 属性对事件进行排序，例如: `ORDER BY e.timestampStr ASC` (升序) 或 `DESC` (降序)
+    - 你可以使用字符串比较操作 (`>`, `<`, `>=`, `<=`, `=`) 来比较时间戳字符串，也可以使用 `STARTS WITH` 进行前缀匹配（例如按年份过滤）。
+    - 可供查询的范围是2024年12月到2025年4月。
+
+    **要求:**
+    - 严格遵守上述图谱模式中列出的节点标签、属性名称、关系类型和时间格式。
+    - 只输出 Cypher 查询语句，不要包含任何解释性文字、前缀或额外的符号。
+
+    查询示例：
+    问题： 2025年4月，英伟达发生了哪些事件？
+    查询语句：MATCH (c:Entity {name: '英伟达'})<-[r]-(e:Event)
+WHERE e.timestampStr >= '2025-04-01 00:00:00' AND e.timestampStr <= '2025-04-30 23:59:59'
+RETURN e.eventType, e.timestampStr, type(r)
         """
         
         messages = [
@@ -118,6 +126,7 @@ def generate_cypher(natural_language_query):
         # 调用LLM API生成Cypher查询
         response = None
         if USE_OPENAI:
+            print("使用OpenAI API生成Cypher查询")
             response = openai_client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=messages,
@@ -125,6 +134,7 @@ def generate_cypher(natural_language_query):
                 max_tokens=500,
             )
         else:
+            print("使用DeepSeek API生成Cypher查询")
             deepseek_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
             response = deepseek_client.chat.completions.create(
                 model=DEEPSEEK_MODEL,
@@ -135,34 +145,41 @@ def generate_cypher(natural_language_query):
         
         # 提取生成的Cypher查询语句
         cypher_query = response.choices[0].message.content.strip()
+        print(f"生成的Cypher查询语句: {cypher_query}")
         return cypher_query
         
     except Exception as e:
         print(f"生成Cypher查询时出错: {str(e)}")
         raise Exception(f"生成Cypher查询时出错: {str(e)}")
 
-def generate_natural_language_response(query_result, original_query):
+def generate_natural_language_response(query_result, original_query, stream=False):
     """
     将图数据库查询结果转换为自然语言响应
     
     Args:
         query_result (list): 图数据库查询结果
         original_query (str): 原始用户问题
+        stream (bool): 是否使用流式响应，默认为False
         
     Returns:
-        str: 自然语言响应
+        str或generator: 如果stream=False，返回字符串；如果stream=True，返回流式响应对象
     """
     try:
+        print(f"开始将查询结果转换为自然语言响应")
+        print(f"原始问题: '{original_query}'")
+        print(f"查询结果数量: {len(query_result)}")
+        print(f"是否使用流式响应: {stream}")
+        
         # 系统提示词，指导LLM如何将查询结果转换为自然语言
         system_prompt = """你是一个知识图谱查询解释专家。你的任务是将Neo4j查询结果转换为流畅、自然的语言解释。
 
         遵循以下要求:
         1. 回答应直接、明确地解答用户的原始问题
-        2. 使用简洁、易懂的语言
-        3. 如果结果为空，请友好地指出没有找到相关信息
-        4. 不要提及技术细节如"查询"、"Neo4j"或"Cypher"
-        5. 对于时间相关的查询，确保清晰地表达时间关系
-        6. 对于复杂的结果，进行适当的总结和概括
+        2. 如果结果为空，请友好地指出没有找到相关信息
+        3. 不要提及技术细节如"查询"、"Neo4j"或"Cypher"
+        4. 对于时间相关的查询，确保清晰地表达时间关系
+        5. 对于复杂的结果，进行适当的总结和概括 
+        6. 如果查询到的结果中有与问题无关的项，无需指出，**直接忽略**
         """
         
         # 将查询结果转换为字符串
@@ -174,26 +191,35 @@ def generate_natural_language_response(query_result, original_query):
         ]
         
         # 调用LLM API生成自然语言响应
-        response = None
         if USE_OPENAI:
+            print("使用OpenAI API生成自然语言响应")
             response = openai_client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1000,
+                stream=stream
             )
         else:
+            print("使用DeepSeek API生成自然语言响应")
             deepseek_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
             response = deepseek_client.chat.completions.create(
                 model=DEEPSEEK_MODEL,
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1000,
+                stream=stream
             )
         
-        # 提取生成的自然语言响应
-        natural_language = response.choices[0].message.content.strip()
-        return natural_language
+        if stream:
+            # 如果是流式响应，直接返回响应对象
+            print("返回流式响应对象")
+            return response
+        else:
+            # 提取生成的自然语言响应
+            natural_language = response.choices[0].message.content.strip()
+            print(f"生成的自然语言响应: '{natural_language[:100]}...(截断)'")
+            return natural_language
         
     except Exception as e:
         print(f"生成自然语言响应时出错: {str(e)}")

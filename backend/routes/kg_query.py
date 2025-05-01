@@ -27,7 +27,8 @@ def query_knowledge_graph():
     
     请求体:
     {
-        "query": "自然语言问题"
+        "query": "自然语言问题",
+        "stream": false  // 可选，是否使用流式响应
     }
     
     响应:
@@ -44,15 +45,24 @@ def query_knowledge_graph():
             return jsonify({'status': 'error', 'message': '缺少查询参数'}), 400
         
         natural_language_query = data['query']
+        use_stream = data.get('stream', False)  # 默认不使用流式响应
+        print(f"收到知识图谱查询请求: '{natural_language_query}', 流式响应: {use_stream}")
         
         # 1. 生成Cypher查询
+        print("步骤1: 生成Cypher查询")
         cypher_query = generate_cypher(natural_language_query)
+        print(f"生成的Cypher查询: {cypher_query}")
         
         # 2. 执行Cypher查询
+        print("步骤2: 执行Cypher查询")
         query_result = neo4j_service.run_query(cypher_query)
+        print(f"查询结果条数: {len(query_result)}")
         
         # 3. 生成自然语言响应
-        response = generate_natural_language_response(query_result, natural_language_query)
+        print(f"步骤3: 生成自然语言响应, 流式: {use_stream}")
+        response = generate_natural_language_response(query_result, natural_language_query, stream=False)  # API接口始终用非流式
+        print(f"生成的自然语言响应长度: {len(response)}")
+        print("知识图谱查询处理完成")
         
         # 4. 返回结果
         return jsonify({
@@ -64,4 +74,6 @@ def query_knowledge_graph():
         })
         
     except Exception as e:
+        print(f"知识图谱查询API出错: {str(e)}")
+        print(f"错误详情: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500 

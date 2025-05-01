@@ -4,6 +4,12 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
+      colors: {
+        gray: {
+          750: 'var(--bg-tertiary)',
+          850: '#18202e',
+        },
+      },
       animation: {
         'fadeIn': 'fadeIn 0.2s ease-in-out',
         'slideIn': 'slideIn 0.3s ease-out',
