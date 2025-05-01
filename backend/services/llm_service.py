@@ -153,13 +153,14 @@ RETURN e.eventType, e.timestampStr, e.triggerText, e.originalText
         print(f"生成Cypher查询时出错: {str(e)}")
         raise Exception(f"生成Cypher查询时出错: {str(e)}")
 
-def generate_natural_language_response(query_result, original_query, stream=False):
+def generate_natural_language_response(query_result, original_query, conversation_history=None, stream=False):
     """
     将图数据库查询结果转换为自然语言响应
     
     Args:
         query_result (list): 图数据库查询结果
         original_query (str): 原始用户问题
+        conversation_history (list): 对话历史，默认为None
         stream (bool): 是否使用流式响应，默认为False
         
     Returns:
@@ -170,6 +171,7 @@ def generate_natural_language_response(query_result, original_query, stream=Fals
         print(f"原始问题: '{original_query}'")
         print(f"查询结果数量: {len(query_result)}")
         print(f"是否使用流式响应: {stream}")
+        print(f"是否有对话历史: {conversation_history is not None}")
         
         # 系统提示词，指导LLM如何将查询结果转换为自然语言
         system_prompt = """你是一个知识图谱查询解释专家。你的任务是将Neo4j查询结果转换为流畅、自然的语言解释，再根据用户提出的原始问题，将查询结果与你的知识结合，给出最终的回答。
@@ -181,6 +183,7 @@ def generate_natural_language_response(query_result, original_query, stream=Fals
         4. 对于时间相关的查询，确保清晰地表达时间关系
         5. 对于复杂的结果，进行适当的总结和概括 
         6. 如果查询到的结果中有与问题无关的项，无需指出，**直接忽略**
+        7. 当有对话历史时，使用这些上下文信息使你的回答更加相关和个性化。
         """
         
         # 将查询结果转换为字符串
@@ -188,8 +191,21 @@ def generate_natural_language_response(query_result, original_query, stream=Fals
         
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"原始问题：{original_query}\n\n查询结果：{result_str}\n\n请将这些信息转换为自然语言回答。"}
         ]
+        
+        # 如果有对话历史，添加到消息中
+        if conversation_history:
+            # 添加最多5轮对话历史作为上下文，避免上下文过长
+            recent_history = conversation_history[-10:]
+            for msg in recent_history:
+                role = "user" if msg['sender'] == 'user' else "assistant"
+                messages.append({"role": role, "content": msg['content']})
+                
+            # 添加最新的查询请求
+            messages.append({"role": "user", "content": f"我想知道：{original_query}\n\n查询结果：{result_str}\n\n请将这些信息转换为自然语言回答。"})
+        else:
+            # 无对话历史时的简单请求
+            messages.append({"role": "user", "content": f"原始问题：{original_query}\n\n查询结果：{result_str}\n\n请将这些信息转换为自然语言回答。"})
         
         # 调用LLM API生成自然语言响应
         if USE_OPENAI:

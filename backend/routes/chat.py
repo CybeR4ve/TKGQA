@@ -327,7 +327,16 @@ def send_message(current_user, conversation_id):
                     return
                 
                 # 使用流式响应生成自然语言解释
-                nl_response = generate_natural_language_response(query_result, original_query, stream=True)
+                # 获取完整的对话历史，不包括当前创建的系统消息
+                conversation_history = conversation['messages'][:-1]
+                
+                # 传递对话历史到自然语言生成函数
+                nl_response = generate_natural_language_response(
+                    query_result, 
+                    original_query, 
+                    conversation_history=conversation_history, 
+                    stream=True
+                )
                 
                 # 初始化累积响应
                 accumulated_content = ""
