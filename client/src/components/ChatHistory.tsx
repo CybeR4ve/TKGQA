@@ -57,8 +57,9 @@ export function ChatHistory({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto px-2">
-      <div className="sticky top-0 bg-gray-50 dark:bg-gray-750 px-2 py-3 z-10">
+    <div className="flex-1 overflow-hidden flex flex-col h-full">
+      {/* 固定搜索栏 */}
+      <div className="sticky-search py-3 px-2 bg-gray-50 dark:bg-gray-750 shadow-sm">
         <div className="relative">
           <input
             type="text"
@@ -85,67 +86,70 @@ export function ChatHistory({
         )}
       </div>
       
-      <div className="mt-2 space-y-2 pb-4">
-        {filteredConversations.map((conversation) => {
-          const latestMessage = getLatestMessage(conversation);
-          const hasMessages = conversation.messages.length > 0;
-          const messagePreview = hasMessages 
-            ? (conversation.messages[conversation.messages.length - 1]?.content || '').substring(0, 60) 
-            : '暂无消息';
-          
-          return (
-          <div
-            key={conversation.id}
-              className={`relative group rounded-lg overflow-hidden transition-all duration-200 ${
-                activeConversation === conversation.id 
-                  ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 dark:border-blue-400 shadow-sm' 
-                  : 'hover:bg-white dark:hover:bg-gray-800 border-l-4 border-transparent'
-            }`}
-          >
-            <button
-              onClick={() => onSelect(conversation.id)}
-                className="w-full p-3 text-left transition-colors pr-12"
+      {/* 可滚动的对话列表 */}
+      <div className="flex-1 overflow-y-auto px-2 mt-2 pb-4">
+        <div className="space-y-2">
+          {filteredConversations.map((conversation) => {
+            const latestMessage = getLatestMessage(conversation);
+            const hasMessages = conversation.messages.length > 0;
+            const messagePreview = hasMessages 
+              ? (conversation.messages[conversation.messages.length - 1]?.content || '').substring(0, 60) 
+              : '暂无消息';
+            
+            return (
+            <div
+              key={conversation.id}
+                className={`relative group rounded-lg overflow-hidden transition-all duration-200 ${
+                  activeConversation === conversation.id 
+                    ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 dark:border-blue-400 shadow-sm' 
+                    : 'hover:bg-white dark:hover:bg-gray-800 border-l-4 border-transparent'
+              }`}
             >
-                <div className="flex items-start">
-                  <div className="flex-1 min-w-0">
-                    <h3 className={`font-medium truncate text-sm ${
-                      activeConversation === conversation.id
-                        ? 'text-blue-700 dark:text-blue-400'
-                        : 'text-gray-900 dark:text-white'
-                    }`}>
-                      {conversation.title}
-                    </h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-1 break-all">
-                      {messagePreview}
-            </p>
-                    <div className="flex items-center mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                      <Calendar className="h-3 w-3 mr-1" />
-                      {formatDate(conversation.timestamp)}
+              <button
+                onClick={() => onSelect(conversation.id)}
+                  className="w-full p-3 text-left transition-colors pr-12"
+              >
+                  <div className="flex items-start">
+                    <div className="flex-1 min-w-0">
+                      <h3 className={`font-medium truncate text-sm ${
+                        activeConversation === conversation.id
+                          ? 'text-blue-700 dark:text-blue-400'
+                          : 'text-gray-900 dark:text-white'
+                      }`}>
+                        {conversation.title}
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-1 break-all">
+                        {messagePreview}
+              </p>
+                      <div className="flex items-center mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        <Calendar className="h-3 w-3 mr-1" />
+                        {formatDate(conversation.timestamp)}
+                      </div>
                     </div>
-                  </div>
-            </div>
-          </button>
-            <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(conversation.id);
-                }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-              title="删除对话"
-            >
-              <Trash2 className="h-4 w-4" />
+              </div>
             </button>
-          </div>
-          );
-        })}
-        {filteredConversations.length === 0 && (
-          <div className="p-6 text-center text-gray-500 dark:text-gray-400 text-sm bg-white dark:bg-gray-800 rounded-lg shadow-sm m-2 border border-gray-200 dark:border-gray-700">
-            {searchQuery ? '没有找到相关对话' : '暂无对话历史'}
-            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-              {searchQuery ? '尝试其他关键词' : '点击"新建对话"开始聊天吧'}
-            </p>
-          </div>
-        )}
+              <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(conversation.id);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                title="删除对话"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+            );
+          })}
+          {filteredConversations.length === 0 && (
+            <div className="p-6 text-center text-gray-500 dark:text-gray-400 text-sm bg-white dark:bg-gray-800 rounded-lg shadow-sm m-2 border border-gray-200 dark:border-gray-700">
+              {searchQuery ? '没有找到相关对话' : '暂无对话历史'}
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                {searchQuery ? '尝试其他关键词' : '点击"新建对话"开始聊天吧'}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

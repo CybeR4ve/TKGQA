@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChatHistory } from './components/ChatHistory.tsx';
-import { MessageBubble } from './components/MessageBubble.tsx';
-import { ChatInput } from './components/ChatInput.tsx';
-import { LoadingIndicator } from './components/LoadingIndicator.tsx';
-import { AuthPopover } from './components/AuthPopover.tsx';
+import { ChatHistory } from './components/ChatHistory';
+import { MessageBubble } from './components/MessageBubble';
+import { ChatInput } from './components/ChatInput';
+import { LoadingIndicator } from './components/LoadingIndicator';
+import { AuthPopover } from './components/AuthPopover';
 import { Moon, Sun, User } from 'lucide-react';
 import type { Conversation, Message, User as UserType } from './types';
 import { API_BASE_URL, CONFIG } from './config';
@@ -502,7 +502,7 @@ function App() {
       {/* 主内容区域 - 更现代化的设计 */}
       <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 relative">
         {/* 消息区域 */}
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-100 dark:bg-gray-850">
+        <div className="flex-1 overflow-y-auto input-scrollbar p-4 bg-gray-100 dark:bg-gray-850">
           <div className="max-w-3xl mx-auto">
             {activeConversation && (
               <div className="py-2">
