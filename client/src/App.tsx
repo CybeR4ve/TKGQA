@@ -1038,7 +1038,7 @@ function App() {
         <div className="flex items-center space-x-4">
           <h1 className="text-xl font-bold">TKGQA 系统</h1>
           <div className="flex space-x-2">
-            <button
+            <button 
               onClick={() => setCurrentView('chat')}
               className={`px-4 py-2 rounded-md ${
                 currentView === 'chat' 
@@ -1047,19 +1047,19 @@ function App() {
               }`}
             >
               聊天
-            </button>
-            <button
+              </button>
+              <button 
               onClick={() => setCurrentView('graph')}
               className={`px-4 py-2 rounded-md flex items-center ${
                 currentView === 'graph' 
                   ? (isDarkMode ? 'bg-gray-700 text-white' : 'bg-blue-500 text-white') 
                   : (isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100')
               }`}
-            >
+              >
               <BarChart2 className="w-4 h-4 mr-1" />
               图谱可视化
             </button>
-          </div>
+                  </div>
         </div>
 
         <div className="flex items-center space-x-3">
@@ -1073,7 +1073,7 @@ function App() {
             aria-label="切换深色模式"
           >
             {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
+              </button>
 
           <div className="relative">
             <button
@@ -1095,7 +1095,7 @@ function App() {
                 user={user}
               />
             )}
-          </div>
+            </div>
         </div>
       </header>
 
@@ -1108,129 +1108,129 @@ function App() {
               <div className="p-4 border-b dark:border-gray-700 bg-gradient-to-r from-blue-50 to-white dark:from-gray-700 dark:to-gray-800">
                 <div className="flex items-center justify-between">
                   <h1 className="text-xl font-bold text-gray-800 dark:text-white">智能问答系统</h1>
-                </div>
-              </div>
-              
-              <div className="p-4 bg-gray-50 dark:bg-gray-750">
-                <button
-                  onClick={handleNewConversation}
-                  disabled={isLoading || !user}
-                  className={`w-full py-2.5 px-4 rounded-lg ${
-                    !user 
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400' 
-                      : 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-700'
-                  } flex items-center justify-center shadow-sm transition-colors`}
-                  title={user ? "新建对话" : "请先登录"}
-                >
-                  {isLoading ? (
-                    <LoadingIndicator size="small" color="neutral" className="py-0" />
-                  ) : "新建对话"}
-                </button>
-              </div>
+          </div>
+        </div>
+        
+        <div className="p-4 bg-gray-50 dark:bg-gray-750">
+          <button
+            onClick={handleNewConversation}
+            disabled={isLoading || !user}
+            className={`w-full py-2.5 px-4 rounded-lg ${
+              !user 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400' 
+                : 'bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-700'
+            } flex items-center justify-center shadow-sm transition-colors`}
+            title={user ? "新建对话" : "请先登录"}
+          >
+            {isLoading ? (
+              <LoadingIndicator size="small" color="neutral" className="py-0" />
+            ) : "新建对话"}
+          </button>
+        </div>
 
-              <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-750">
-                {isLoadingConversations ? (
-                  <div className="flex justify-center py-4">
-                    <LoadingIndicator color="primary" />
-                  </div>
-                ) : (
-                <ChatHistory
-                  conversations={conversations}
-                  activeConversation={activeConversation}
-                  onSelect={setActiveConversation}
-                  onDelete={handleDeleteConversation}
-                  onRefreshConversations={fetchConversations}
-                />
-                )}
-              </div>
+        <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-750">
+          {isLoadingConversations ? (
+            <div className="flex justify-center py-4">
+              <LoadingIndicator color="primary" />
             </div>
+          ) : (
+          <ChatHistory
+            conversations={conversations}
+            activeConversation={activeConversation}
+            onSelect={setActiveConversation}
+            onDelete={handleDeleteConversation}
+            onRefreshConversations={fetchConversations}
+          />
+          )}
+        </div>
+      </div>
 
-            {/* 主内容区域 - 更现代化的设计 */}
-            <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 relative">
-              {/* 消息区域 */}
-              <div className="flex-1 overflow-y-auto input-scrollbar p-4 bg-gray-100 dark:bg-gray-850">
-                <div className="max-w-3xl mx-auto">
-                  {activeConversation && (
-                    <div className="py-2">
-                      <div className="space-y-4">
-                        {conversations.find(c => c.id === activeConversation)?.messages.map((message, index) => (
-                          <MessageBubble 
-                            key={message.id || index} 
-                            message={message} 
-                            onRegenerate={message.sender === 'system' ? handleRegenerateMessage : undefined}
-                            onEditMessage={message.sender === 'user' ? handleEditMessage : undefined}
-                          />
-                        ))}
-                      </div>
-                  </div>
+      {/* 主内容区域 - 更现代化的设计 */}
+      <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 relative">
+        {/* 消息区域 */}
+        <div className="flex-1 overflow-y-auto input-scrollbar p-4 bg-gray-100 dark:bg-gray-850">
+          <div className="max-w-3xl mx-auto">
+            {activeConversation && (
+              <div className="py-2">
+                <div className="space-y-4">
+                  {conversations.find(c => c.id === activeConversation)?.messages.map((message, index) => (
+                    <MessageBubble 
+                      key={message.id || index} 
+                      message={message} 
+                      onRegenerate={message.sender === 'system' ? handleRegenerateMessage : undefined}
+                      onEditMessage={message.sender === 'user' ? handleEditMessage : undefined}
+                    />
+                  ))}
+                </div>
+            </div>
+            )}
+            {!activeConversation && (
+              <div className="h-full flex flex-col items-center justify-center p-8">
+                <div className="text-center mt-20 max-w-md w-full mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm">
+                  <h3 className="text-xl font-medium text-gray-700 dark:text-gray-300 mb-6">
+                    开始一个新的对话
+                  </h3>
+                  {user ? (
+                    <>
+                      <p className="text-gray-500 dark:text-gray-400 mb-8">
+                        点击左侧的"新建对话"按钮开始交流
+                      </p>
+                      <button
+                        onClick={handleNewConversation}
+                        disabled={isLoading}
+                        className="px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center justify-center mx-auto shadow-sm transition-colors dark:bg-blue-600 dark:hover:bg-blue-700"
+                      >
+                        {isLoading ? (
+                          <LoadingIndicator size="small" color="neutral" className="py-0" />
+                        ) : "新建对话"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-gray-500 dark:text-gray-400 mb-8">
+                        请先登录后开始对话
+                      </p>
+                      <button
+                        onClick={() => setIsAuthOpen(true)}
+                        className="px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center justify-center mx-auto shadow-sm transition-colors dark:bg-blue-600 dark:hover:bg-blue-700"
+                      >
+                        {isLoadingAuth && !isAuthOpen ? (
+                          <LoadingIndicator size="small" color="neutral" className="py-0" />
+                        ) : "登录/注册"}
+                      </button>
+                    </>
                   )}
-                  {!activeConversation && (
-                    <div className="h-full flex flex-col items-center justify-center p-8">
-                      <div className="text-center mt-20 max-w-md w-full mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm">
-                        <h3 className="text-xl font-medium text-gray-700 dark:text-gray-300 mb-6">
-                          开始一个新的对话
-                        </h3>
-                        {user ? (
-                          <>
-                            <p className="text-gray-500 dark:text-gray-400 mb-8">
-                              点击左侧的"新建对话"按钮开始交流
-                            </p>
-                            <button
-                              onClick={handleNewConversation}
-                              disabled={isLoading}
-                              className="px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center justify-center mx-auto shadow-sm transition-colors dark:bg-blue-600 dark:hover:bg-blue-700"
-                            >
-                              {isLoading ? (
-                                <LoadingIndicator size="small" color="neutral" className="py-0" />
-                              ) : "新建对话"}
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-gray-500 dark:text-gray-400 mb-8">
-                              请先登录后开始对话
-                            </p>
-                            <button
-                              onClick={() => setIsAuthOpen(true)}
-                              className="px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center justify-center mx-auto shadow-sm transition-colors dark:bg-blue-600 dark:hover:bg-blue-700"
-                            >
-                              {isLoadingAuth && !isAuthOpen ? (
-                                <LoadingIndicator size="small" color="neutral" className="py-0" />
-                              ) : "登录/注册"}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                )}
-                  {/* 加载指示器 */}
-                  {isLoading && (
-                    <div className="flex justify-center my-4">
-                      <LoadingIndicator color="primary" size="medium" />
-                    </div>
-                  )}
-                <div ref={messagesEndRef} />
                 </div>
               </div>
-              
-              {/* 输入区域 */}
-              <div className="border-t dark:border-gray-700 bg-white dark:bg-gray-800">
-                <div className="max-w-3xl mx-auto p-3">
+          )}
+            {/* 加载指示器 */}
+            {isLoading && (
+              <div className="flex justify-center my-4">
+                <LoadingIndicator color="primary" size="medium" />
+              </div>
+            )}
+          <div ref={messagesEndRef} />
+          </div>
+        </div>
+        
+        {/* 输入区域 */}
+        <div className="border-t dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className="max-w-3xl mx-auto p-3">
                   <ChatInput 
                     onSendMessage={handleSendMessage} 
                     onAbortGeneration={handleAbortGeneration} 
                     disabled={isLoading || !activeConversation} 
                     isLoading={isLoading} 
                   />
-                </div>
-              </div>
-            </div>
+          </div>
+        </div>
+      </div>
           </>
         ) : (
           <div className="flex-1 overflow-y-auto">
             <GraphPage />
           </div>
-        )}
+      )}
       </div>
     </div>
   );
