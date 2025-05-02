@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { API_BASE_URL } from '../config';
 
 // Declare NeoVis global variable
@@ -13,20 +13,97 @@ interface GraphVisualizationProps {
   height?: string;
   width?: string;
   isDarkMode?: boolean;
+  onSelectData?: (data: any, type: 'node' | 'relationship') => void;
+  autoRunQuery?: boolean;
 }
 
-export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
-  cypher = "MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 50",
+export const GraphVisualization = forwardRef<any, GraphVisualizationProps>(({
+  cypher = "MATCH (n)-[r]-(m) RETURN n,r,m LIMIT 50",
   height = "600px",
   width = "100%",
-  isDarkMode = false
-}) => {
+  isDarkMode = false,
+  onSelectData,
+  autoRunQuery = true
+}, ref) => {
   const vizRef = useRef<HTMLDivElement>(null);
+  const vizInstanceRef = useRef<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [customCypher, setCustomCypher] = useState(cypher);
   const [selectedData, setSelectedData] = useState<any | null>(null);
   const [dataType, setDataType] = useState<'node' | 'relationship' | null>(null);
+  const [prevCypher, setPrevCypher] = useState<string>(cypher);
+
+  // 暴露给父组件的方法
+  useImperativeHandle(ref, () => ({
+    // 渲染图谱的方法，供父组件调用
+    renderGraph: () => {
+      renderGraph();
+    },
+    zoomIn: (factor: number = 0.2) => {
+      if (vizInstanceRef.current && vizInstanceRef.current.network) {
+        const currentScale = vizInstanceRef.current.network.getScale();
+        vizInstanceRef.current.network.moveTo({
+          scale: currentScale + factor
+        });
+      }
+    },
+    zoomOut: (factor: number = 0.2) => {
+      if (vizInstanceRef.current && vizInstanceRef.current.network) {
+        const currentScale = vizInstanceRef.current.network.getScale();
+        vizInstanceRef.current.network.moveTo({
+          scale: Math.max(0.1, currentScale - factor)
+        });
+      }
+    },
+    resetZoom: () => {
+      if (vizInstanceRef.current && vizInstanceRef.current.network) {
+        vizInstanceRef.current.network.moveTo({
+          scale: 1.0
+        });
+      }
+    },
+    toggleZoom: () => {
+      if (vizInstanceRef.current && vizInstanceRef.current.network) {
+        // 获取当前缩放状态
+        const currentZoomEnabled = !vizInstanceRef.current._networkOptions || 
+                                  !vizInstanceRef.current._networkOptions.interaction || 
+                                  vizInstanceRef.current._networkOptions.interaction.zoomView !== false;
+        
+        // 设置新的缩放状态
+        const newZoomable = !currentZoomEnabled;
+        
+        // 直接设置网络选项
+        vizInstanceRef.current.network.setOptions({
+          interaction: {
+            zoomView: newZoomable
+          }
+        });
+        
+        // 保存当前选项状态以便下次切换
+        if (!vizInstanceRef.current._networkOptions) {
+          vizInstanceRef.current._networkOptions = {};
+        }
+        if (!vizInstanceRef.current._networkOptions.interaction) {
+          vizInstanceRef.current._networkOptions.interaction = {};
+        }
+        vizInstanceRef.current._networkOptions.interaction.zoomView = newZoomable;
+        
+        return newZoomable;
+      }
+      return false;
+    },
+    fitView: () => {
+      if (vizInstanceRef.current && vizInstanceRef.current.network) {
+        vizInstanceRef.current.network.fit();
+      }
+    },
+    getScale: () => {
+      if (vizInstanceRef.current && vizInstanceRef.current.network) {
+        return vizInstanceRef.current.network.getScale();
+      }
+      return 1;
+    }
+  }));
 
   useEffect(() => {
     // Ensure the container has an ID for NeoVis if it doesn't already
@@ -38,7 +115,10 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       const script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/neovis.js@2.0.2/dist/neovis.js';
       script.async = true;
-      script.onload = () => renderGraph();
+      script.onload = () => {
+        // 初始加载时不执行查询，等待用户点击"执行查询"按钮
+        setIsLoading(false);
+      };
       script.onerror = () => {
         setError('加载 NeoVis.js 库失败');
         setIsLoading(false);
@@ -53,9 +133,22 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
         }
       };
     } else {
+      // 初始加载时不执行查询，等待用户点击"执行查询"按钮
+      setIsLoading(false);
+    }
+  }, []); // 只在初始加载时运行
+
+  // 监听主题变化，重新渲染图谱
+  useEffect(() => {
+    if (window.NeoVis && !isLoading && vizInstanceRef.current) {
       renderGraph();
     }
-  }, [cypher, isDarkMode]); // Re-run effect if cypher or dark mode changes
+  }, [isDarkMode]);
+
+  // 更新cypher查询参数但不执行查询
+  useEffect(() => {
+    setPrevCypher(cypher);
+  }, [cypher]);
 
   const renderGraph = async () => {
     // Ensure NeoVis and container are ready
@@ -70,6 +163,11 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       setError(null);
       setSelectedData(null);
       setDataType(null);
+      
+      // 如果有onSelectData回调函数，清空选中数据
+      if (onSelectData) {
+        onSelectData(null, 'node');
+      }
 
       // Clear previous graph instance if it exists and clear container
       // Clearing the container and letting React handle cleanup is often sufficient.
@@ -144,7 +242,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
             color: isDarkMode ? "#d1d5db" : "#aaa" // Default color
           }
         },
-        initialCypher: customCypher,
+        initialCypher: cypher,
         backgroundColor: isDarkMode ? "#1f2937" : "#f8f8f8",
         nodeRadius: 25,
         // Add the click to select node/relationship functionality using registerOnEvent
@@ -152,6 +250,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       };
 
       const viz = new window.NeoVis.default(config);
+      vizInstanceRef.current = viz;
 
       // Register node click event (retained user's original logic)
       viz.registerOnEvent("clickNode", (event: any) => {
@@ -200,6 +299,11 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
         setSelectedData(displayData);
         setDataType('node');
+        
+        // 如果有传入回调函数，则调用
+        if (onSelectData) {
+          onSelectData(displayData, 'node');
+        }
       });
 
       // Register edge (relationship) click event (retained user's original logic)
@@ -265,6 +369,11 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
         console.log("关系显示数据:", displayData);
         setSelectedData(displayData);
         setDataType('relationship');
+        
+        // 如果有传入回调函数，则调用
+        if (onSelectData) {
+          onSelectData(displayData, 'relationship');
+        }
       });
 
       // Re-add completed event listener to manually update Event node colors
@@ -341,121 +450,53 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
            // Log the full error object for more details
            console.error(err);
         }
+        
+        // 完成加载
+        setIsLoading(false);
       });
-
 
       // Call render
       viz.render();
-
-      setIsLoading(false);
+      
     } catch (err) {
       setError(`渲染图形失败: ${err instanceof Error ? err.message : String(err)}`);
       setIsLoading(false);
     }
   };
 
-  // Effect to re-render graph when isDarkMode changes
-  useEffect(() => {
-    // Only attempt to re-render if NeoVis is loaded and not currently loading data
-    if (!isLoading && window.NeoVis) {
-      renderGraph();
-    }
-  }, [isDarkMode]); // Depend only on isDarkMode for re-render on theme change
-
-  const handleCypherChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setCustomCypher(e.target.value);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    renderGraph();
-  };
-
-  const inputTextColor = isDarkMode ? 'text-white' : 'text-gray-800';
-  const labelTextColor = isDarkMode ? 'text-gray-300' : 'text-gray-700';
-  const inputBgColor = isDarkMode ? 'bg-gray-700' : 'bg-white';
-  const inputBorderColor = isDarkMode ? 'border-gray-600' : 'border-gray-300';
-
   return (
-    <div className="graph-visualization-container p-4">
-      <h2 className={`text-xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-        知识图谱可视化
-      </h2>
-
-      <form onSubmit={handleSubmit} className="mb-4">
-        <div className="mb-2">
-          <label htmlFor="cypher-query" className={`block text-sm font-medium ${labelTextColor}`}>
-            Cypher 查询:
-          </label>
-          <textarea
-            id="cypher-query"
-            value={customCypher}
-            onChange={handleCypherChange}
-            className={`w-full p-2 border rounded shadow-sm ${inputBgColor} ${inputTextColor} ${inputBorderColor}`}
-            rows={3}
-            placeholder="Enter your Cypher query here..."
-          />
-        </div>
-        <button
-          type="submit"
-          className={`px-4 py-2 ${isDarkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'} text-white rounded`}
-           disabled={isLoading} // Disable button while loading
-        >
-          {isLoading ? '加载中...' : '更新图形'}
-        </button>
-      </form>
-
+    <div className="graph-visualization-container h-full relative">
       {isLoading && (
-        <div className="flex justify-center items-center h-24">
-          <div className={`animate-spin rounded-full h-8 w-8 border-b-2 ${isDarkMode ? 'border-blue-400' : 'border-blue-500'}`}></div>
-          <span className={`ml-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>加载中...</span>
+        <div className="absolute inset-0 flex justify-center items-center bg-black bg-opacity-20 z-10">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg flex items-center">
+            <div className={`animate-spin rounded-full h-6 w-6 border-b-2 mr-3 ${isDarkMode ? 'border-blue-400' : 'border-blue-600'}`}></div>
+            <span className={isDarkMode ? 'text-gray-200' : 'text-gray-700'}>加载中...</span>
+          </div>
         </div>
       )}
 
       {error && (
-        <div className={`${isDarkMode ? 'bg-red-900/30 border-red-800 text-red-300' : 'bg-red-100 border-red-400 text-red-700'} border px-4 py-3 rounded mb-4`}>
-          <p>{error}</p>
+        <div className={`absolute top-2 left-2 right-2 p-3 rounded-md flex items-start z-10 ${isDarkMode ? 'bg-red-900/80 border border-red-800 text-red-200' : 'bg-red-100 border border-red-400 text-red-700'}`}>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div>
+            <p className="font-medium text-sm">加载失败</p>
+            <p className="text-xs mt-1">{error}</p>
+          </div>
         </div>
       )}
 
       <div
-        id="neo4j-graph" // Ensure this ID is consistent with config.containerId
+        id="neo4j-graph"
         ref={vizRef}
         style={{
           height,
           width,
-          border: isDarkMode ? '1px solid #374151' : '1px solid #ddd',
-          borderRadius: '4px',
           backgroundColor: isDarkMode ? "#1f2937" : "#f8f8f8"
         }}
+        className="rounded-lg"
       ></div>
-
-      {selectedData && Object.keys(selectedData).length > 0 && (
-        <div className={`mt-4 p-4 rounded shadow ${isDarkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-800'}`}>
-          <h3 className="text-lg font-semibold mb-2">
-            {dataType === 'node' ? '节点详情' : '关系详情'}：
-            <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
-              dataType === 'node'
-                ? (isDarkMode ? 'bg-blue-800 text-blue-200' : 'bg-blue-100 text-blue-800')
-                : (isDarkMode ? 'bg-purple-800 text-purple-200' : 'bg-purple-100 text-purple-800')
-            }`}>
-              {dataType === 'node' ? '节点' : '关系'}
-            </span>
-          </h3>
-          <ul className="list-disc list-inside space-y-1">
-            {Object.entries(selectedData).map(([key, value]) => (
-              <li key={key} className="break-words">
-                <strong>{key}:</strong>{' '}
-                {key === 'originalText' || (typeof value === 'string' && value.length > 100) ? ( // Retained long text handling
-                  <pre className="whitespace-pre-wrap break-words bg-black/10 p-2 rounded mt-1">{String(value)}</pre>
-                ) : (
-                  String(value)
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
-};
+});
